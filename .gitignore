@@ -1,0 +1,6 @@
+# Ignore wav folder
+wav/
+
+# Ignore environment files
+.env
+.env.*
