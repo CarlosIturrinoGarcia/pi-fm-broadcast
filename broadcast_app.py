@@ -1,10 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-PyQt5 App
-- Dashboard with Frequency spinbox + Set Frequency (hot-reload to running broadcaster)
-- Wi-Fi scan/connect (nmcli) with embedded on-screen keyboard in password dialog
-- Persists window geometry + last frequency
+Pi FM Broadcast Dashboard (v2.0)
+=================================
+
+Production-ready PyQt5 dashboard for controlling FM broadcast service.
+
+Features:
+- Frequency control with hot-reload (SIGHUP/SIGUSR2)
+- WiFi management with on-screen keyboard
+- Real-time service monitoring
+- Health metrics display
+- Touch-optimized interface
+- System tray integration
+
+Integrates with pifm_broadcast v2.0 service.
 """
 
 import os
@@ -12,11 +22,18 @@ import sys
 import re
 import signal
 import subprocess
+import json
+from pathlib import Path
+from typing import Optional, Dict, Any
 
 from theme import apply_theme
 from config import (
     ENV_PATH,
+    SERVICE_PATH,
+    PYTHON_BIN,
     extract_current_frequency,
+    validate_frequency,
+    get_service_status,
 )
 
 from PyQt5.QtCore import (
@@ -27,6 +44,7 @@ from PyQt5.QtCore import (
     QEvent,
     QCoreApplication,
     QProcess,
+    QTimer,
 )
 from PyQt5.QtGui import QIcon, QKeyEvent
 from PyQt5.QtWidgets import (
@@ -52,22 +70,35 @@ from PyQt5.QtWidgets import (
     QDialogButtonBox,
     QSizePolicy,
     QCheckBox,
+    QGroupBox,
+    QGridLayout,
 )
 
-APP_ORG = "Picnic Groups"
-APP_NAME = "PyQt5 App"
+APP_ORG = "PiFmBroadcast"
+APP_NAME = "FM Broadcast Dashboard"
+APP_VERSION = "2.0.0"
 
-# --- Adjust these if needed ---
-SCRIPT_PATH = "/home/rpibroadcaster/pi_broadcast.py"      # your broadcaster
-ENV_FILE    = "/home/rpibroadcaster/broadcast.env"        # env vars (QUEUE_URL, etc.)
-PYTHON_BIN  = "/home/rpibroadcaster/venv/bin/python"      # venv python (preferred)
 
-# ---------- helpers from your runner ----------
-def load_env_file(path: str) -> dict:
-    """Read KEY=VALUE lines from an env file. Supports 'export', quotes, spaces, CRLF."""
+# =============================
+# Environment & Configuration Helpers
+# =============================
+
+def load_env_file(path: str) -> Dict[str, str]:
+    """
+    Read KEY=VALUE lines from an env file.
+
+    Supports 'export', quotes, spaces, CRLF.
+
+    Args:
+        path: Path to .env file
+
+    Returns:
+        Dictionary of environment variables
+    """
     env = {}
     if not os.path.exists(path):
         return env
+
     line_re = re.compile(r"""
         ^\s*
         (?:export\s+)?              # optional 'export '
@@ -76,59 +107,105 @@ def load_env_file(path: str) -> dict:
         (?P<val>.*?)
         \s*$
     """, re.X)
-    with open(path, "r", encoding="utf-8", errors="replace") as f:
-        for raw in f:
-            s = raw.strip().rstrip("\r")
-            if not s or s.startswith("#"):
-                continue
-            m = line_re.match(s)
-            if not m:
-                continue
-            key = m.group("key")
-            val = m.group("val")
-            if (len(val) >= 2) and (val[0] == val[-1]) and val[0] in ("'", '"'):
-                val = val[1:-1]
-            env[key] = val
+
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            for raw in f:
+                s = raw.strip().rstrip("\r")
+                if not s or s.startswith("#"):
+                    continue
+                m = line_re.match(s)
+                if not m:
+                    continue
+                key = m.group("key")
+                val = m.group("val")
+                # Remove quotes
+                if (len(val) >= 2) and (val[0] == val[-1]) and val[0] in ("'", '"'):
+                    val = val[1:-1]
+                env[key] = val
+    except Exception as e:
+        print(f"Warning: Error loading env file {path}: {e}")
+
     return env
 
+
 def render_broadcast_cmd(tmpl: str, freq: float) -> str:
-    """Return command with frequency set; supports {freq}, '<num>', or replacing an existing -f number."""
+    """
+    Render broadcast command template with frequency.
+
+    Supports {freq}, <num>, or -f <number> patterns.
+
+    Args:
+        tmpl: Command template
+        freq: Frequency in MHz
+
+    Returns:
+        Rendered command string
+    """
+    # Replace {freq} placeholder
     if "{freq}" in tmpl:
         return tmpl.replace("{freq}", f"{freq:.1f}")
+
+    # Replace <num> placeholder
     if "<num>" in tmpl:
         return tmpl.replace("<num>", f"{freq:.1f}")
+
+    # Replace existing -f <number>
     if re.search(r"(?<!\S)-f\s+\d+(?:\.\d+)?(?!\S)", tmpl):
-        return re.sub(r"(?<!\S)(-f\s+)\d+(?:\.\d+)?(?!\S)",
-                      lambda m: f"{m.group(1)}{freq:.1f}", tmpl)
+        return re.sub(
+            r"(?<!\S)(-f\s+)\d+(?:\.\d+)?(?!\S)",
+            lambda m: f"{m.group(1)}{freq:.1f}",
+            tmpl
+        )
+
+    # Append -f <freq> if not present
     return f"{tmpl} -f {freq:.1f}"
 
-def write_env_key(path: str, key: str, value: str):
-    """Upsert KEY in the .env file while preserving other lines & comments."""
+
+def write_env_key(path: str, key: str, value: str) -> None:
+    """
+    Upsert KEY in the .env file while preserving other lines & comments.
+
+    Args:
+        path: Path to .env file
+        key: Variable name
+        value: Variable value
+
+    Raises:
+        IOError: If file cannot be written
+    """
     lines = []
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             lines = f.read().splitlines()
+
     key_re = re.compile(rf"^\s*(?:export\s+)?{re.escape(key)}\s*=\s*.*$")
     wrote = False
     out = []
+
     for ln in lines:
         if key_re.match(ln):
             out.append(f'{key}="{value}"')
             wrote = True
         else:
             out.append(ln)
+
     if not wrote:
         if out and out[-1].strip():
-            out.append("")  # keep a blank line at the end before appending
+            out.append("")  # blank line before appending
         out.append(f'{key}="{value}"')
+
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(out) + "\n")
+
 
 # =============================
 # Embedded On-Screen Keyboard
 # =============================
+
 class OnScreenKeyboard(QWidget):
-    """Embedded compact QWERTY keyboard that types into a specific target widget."""
+    """Embedded compact QWERTY keyboard for touchscreen input."""
+
     def __init__(self, parent=None, target: QWidget = None):
         super().__init__(parent)
         self.setObjectName("OnScreenKeyboard")
@@ -198,12 +275,13 @@ class OnScreenKeyboard(QWidget):
         """)
 
     def set_target(self, w: QWidget):
+        """Set target widget for keyboard input."""
         self._target = w
 
     def _mk_btn(self, text, wide=False):
         b = QPushButton(text)
         b.setProperty("wide", "true" if wide else "false")
-        b.setFocusPolicy(Qt.NoFocus)  # do NOT steal focus from the input
+        b.setFocusPolicy(Qt.NoFocus)  # don't steal focus
         b.clicked.connect(lambda checked=False, t=text: self._key_clicked(t))
         return b
 
@@ -225,9 +303,13 @@ class OnScreenKeyboard(QWidget):
         fw = self._target_widget()
         if name == "Backspace":
             if isinstance(fw, QLineEdit):
-                fw.backspace(); return
+                fw.backspace()
+                return
             if isinstance(fw, QTextEdit):
-                c = fw.textCursor(); c.deletePreviousChar(); fw.setTextCursor(c); return
+                c = fw.textCursor()
+                c.deletePreviousChar()
+                fw.setTextCursor(c)
+                return
             self._post_key(Qt.Key_Backspace)
         elif name == "Enter":
             if isinstance(fw, QLineEdit):
@@ -243,22 +325,30 @@ class OnScreenKeyboard(QWidget):
             fw.setCursorPosition(i + len(text))
             return
         if isinstance(fw, QTextEdit):
-            c = fw.textCursor(); c.insertText(text); fw.setTextCursor(c); return
+            c = fw.textCursor()
+            c.insertText(text)
+            fw.setTextCursor(c)
+            return
         for ch in text:
             self._post_key(Qt.Key_Space if ch == " " else 0, ch)
 
     def _post_key(self, key, text=""):
         fw = self._target_widget()
-        if not fw: return
+        if not fw:
+            return
         evp = QKeyEvent(QEvent.KeyPress, key, Qt.NoModifier, text)
         evr = QKeyEvent(QEvent.KeyRelease, key, Qt.NoModifier, text)
-        QCoreApplication.postEvent(fw, evp); QCoreApplication.postEvent(fw, evr)
+        QCoreApplication.postEvent(fw, evp)
+        QCoreApplication.postEvent(fw, evr)
 
 
 # =============================
-# Wi-Fi worker & dialog
+# Wi-Fi Worker & Dialog
 # =============================
+
 class WifiWorker(QThread):
+    """Background worker for WiFi operations using nmcli."""
+
     finished = pyqtSignal(str, object)  # (status, payload)
 
     def __init__(self, action: str, ssid: str = "", password: str = "", parent=None):
@@ -271,24 +361,29 @@ class WifiWorker(QThread):
         try:
             if self.action == "scan":
                 cmd = ["nmcli", "-f", "SSID,SIGNAL,SECURITY", "device", "wifi", "list"]
-                res = subprocess.run(cmd, capture_output=True, text=True)
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
                 if res.returncode != 0:
-                    self.finished.emit("error", res.stderr.strip() or res.stdout.strip() or "nmcli scan failed")
+                    self.finished.emit("error", res.stderr.strip() or "Scan failed")
                     return
                 nets = self._parse_nmcli_scan(res.stdout)
                 self.finished.emit("scanned", nets)
                 return
+
             if self.action == "connect":
                 cmd = ["nmcli", "device", "wifi", "connect", self.ssid, "password", self.password]
-                res = subprocess.run(cmd, capture_output=True, text=True)
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
                 if res.returncode == 0:
                     self.finished.emit("connected", res.stdout.strip() or "Connected")
                 else:
-                    self.finished.emit("error", res.stderr.strip() or res.stdout.strip() or "nmcli connect failed")
+                    self.finished.emit("error", res.stderr.strip() or "Connection failed")
                 return
+
             self.finished.emit("error", f"Unknown action: {self.action}")
+
         except FileNotFoundError:
-            self.finished.emit("error", "nmcli not found on this system.")
+            self.finished.emit("error", "nmcli not found. Install network-manager.")
+        except subprocess.TimeoutExpired:
+            self.finished.emit("error", "Operation timed out")
         except Exception as e:
             self.finished.emit("error", str(e))
 
@@ -308,6 +403,8 @@ class WifiWorker(QThread):
 
 
 class WifiDialog(QDialog):
+    """WiFi network scanner and connection dialog."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Wi-Fi Networks")
@@ -351,7 +448,7 @@ class WifiDialog(QDialog):
         net = item.data(Qt.UserRole)
         ssid = net.get("ssid") or ""
 
-        # Password dialog with embedded keyboard targeted to the password field
+        # Password dialog with embedded keyboard
         pwd_dlg = QDialog(self)
         pwd_dlg.setWindowTitle(f"Password for {ssid}")
 
@@ -363,8 +460,6 @@ class WifiDialog(QDialog):
         pwd_input = QLineEdit()
         pwd_input.setEchoMode(QLineEdit.Password)
         pwd_input.setPlaceholderText("Enter Wi-Fi password")
-        pwd_input.setAttribute(Qt.WA_AcceptTouchEvents, True)
-        pwd_input.setFocusPolicy(Qt.StrongFocus)
 
         form.addRow(info)
         form.addRow("Password:", pwd_input)
@@ -398,12 +493,12 @@ class WifiDialog(QDialog):
         if status == "scanned":
             nets = payload
             if not nets:
-                self.info.setText("No networks found (or nmcli unavailable).")
+                self.info.setText("No networks found.")
                 return
             self.info.setText(f"Found {len(nets)} network(s). Select one to connect.")
             for net in nets:
                 ssid = net.get("ssid") or "<hidden>"
-                text = f"{ssid}  —  Signal: {net.get('signal','')}  —  Sec: {net.get('security','')}"
+                text = f"{ssid}  —  Signal: {net.get('signal','')}  —  Security: {net.get('security','')}"
                 it = QListWidgetItem(text)
                 it.setData(Qt.UserRole, net)
                 self.list_widget.addItem(it)
@@ -417,19 +512,61 @@ class WifiDialog(QDialog):
 
 
 # =============================
+# Health Metrics Worker
+# =============================
+
+class HealthMonitorWorker(QThread):
+    """Background worker to fetch service health metrics."""
+
+    metrics_updated = pyqtSignal(dict)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._running = True
+
+    def run(self):
+        """Periodically check service status."""
+        while self._running:
+            try:
+                status = get_service_status()
+                self.metrics_updated.emit(status)
+            except Exception as e:
+                print(f"Health monitor error: {e}")
+
+            # Sleep for 5 seconds
+            for _ in range(50):
+                if not self._running:
+                    break
+                self.msleep(100)
+
+    def stop(self):
+        """Stop the worker thread."""
+        self._running = False
+
+
+# =============================
 # Dashboard Page
 # =============================
+
 class DashboardPage(QWidget):
+    """Main dashboard page with frequency control and service monitoring."""
+
     freq_set = pyqtSignal(float, bool)  # (frequency, immediate)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         lay = QVBoxLayout(self)
 
-        title = QLabel("Broadcast Dashboard")
+        # Title
+        title = QLabel("FM Broadcast Dashboard")
         title.setStyleSheet("font-size: 22px; font-weight: 600;")
 
-        controls = QHBoxLayout()
-        lbl = QLabel("Frequency (MHz)")
+        # Frequency Control
+        control_group = QGroupBox("Frequency Control")
+        control_layout = QVBoxLayout()
+
+        freq_controls = QHBoxLayout()
+        lbl = QLabel("Frequency (MHz):")
         self.freq_spin = QDoubleSpinBox()
         self.freq_spin.setRange(76.0, 108.0)
         self.freq_spin.setDecimals(1)
@@ -437,38 +574,100 @@ class DashboardPage(QWidget):
         self.freq_spin.setValue(90.8)
 
         self.chk_immediate = QCheckBox("Switch immediately")
-        self.chk_immediate.setToolTip("Abort current playback and switch now")
+        self.chk_immediate.setToolTip("Abort current broadcast and switch now (SIGUSR2)")
 
         self.btn_set_freq = QPushButton("Set Frequency")
-        controls.addWidget(lbl)
-        controls.addWidget(self.freq_spin)
-        controls.addWidget(self.chk_immediate)
-        controls.addWidget(self.btn_set_freq)
-        controls.addStretch(1)
+        self.btn_set_freq.setMinimumHeight(44)
+
+        freq_controls.addWidget(lbl)
+        freq_controls.addWidget(self.freq_spin)
+        freq_controls.addWidget(self.chk_immediate)
+        freq_controls.addWidget(self.btn_set_freq)
+        freq_controls.addStretch(1)
+
+        control_layout.addLayout(freq_controls)
+        control_group.setLayout(control_layout)
+
+        # Service Status
+        status_group = QGroupBox("Service Status")
+        status_layout = QGridLayout()
+
+        self.lbl_status_running = QLabel("Status:")
+        self.lbl_status_value = QLabel("Unknown")
+        self.lbl_status_value.setStyleSheet("font-weight: 600;")
+
+        self.lbl_enabled = QLabel("Auto-start:")
+        self.lbl_enabled_value = QLabel("Unknown")
+
+        status_layout.addWidget(self.lbl_status_running, 0, 0)
+        status_layout.addWidget(self.lbl_status_value, 0, 1)
+        status_layout.addWidget(self.lbl_enabled, 1, 0)
+        status_layout.addWidget(self.lbl_enabled_value, 1, 1)
+        status_layout.setColumnStretch(2, 1)
+
+        status_group.setLayout(status_layout)
+
+        # Broadcaster Output Log
+        log_group = QGroupBox("Service Output")
+        log_layout = QVBoxLayout()
 
         self.log = QTextEdit()
         self.log.setReadOnly(True)
-        self.log.setPlaceholderText("Broadcaster output will appear here…")
+        self.log.setPlaceholderText("Service output will appear here…")
+        self.log.setMinimumHeight(200)
 
+        log_controls = QHBoxLayout()
+        self.btn_clear_log = QPushButton("Clear Log")
+        self.btn_clear_log.setObjectName("secondary")
+        self.btn_clear_log.clicked.connect(self.log.clear)
+        log_controls.addStretch()
+        log_controls.addWidget(self.btn_clear_log)
+
+        log_layout.addWidget(self.log)
+        log_layout.addLayout(log_controls)
+        log_group.setLayout(log_layout)
+
+        # Compose
         lay.addWidget(title)
-        lay.addLayout(controls)
-        lay.addWidget(self.log, 1)
+        lay.addWidget(control_group)
+        lay.addWidget(status_group)
+        lay.addWidget(log_group, 1)
 
+        # Connect signals
         self.btn_set_freq.clicked.connect(
             lambda: self.freq_set.emit(self.freq_spin.value(), self.chk_immediate.isChecked())
         )
 
+    def update_service_status(self, status: dict):
+        """Update service status display."""
+        is_running = status.get("running", False)
+        is_enabled = status.get("enabled", False)
+
+        if is_running:
+            self.lbl_status_value.setText("Running")
+            self.lbl_status_value.setStyleSheet("color: #2ecc94; font-weight: 600;")
+        else:
+            self.lbl_status_value.setText("Stopped")
+            self.lbl_status_value.setStyleSheet("color: #e74c3c; font-weight: 600;")
+
+        self.lbl_enabled_value.setText("Enabled" if is_enabled else "Disabled")
+
 
 # =============================
-# Main Window (integrates QProcess runner)
+# Main Window
 # =============================
+
 class MainWindow(QMainWindow):
+    """Main application window with integrated service management."""
+
     def __init__(self):
         super().__init__()
         self.proc = None  # QProcess for broadcaster
-        self.setWindowTitle(APP_NAME)
+        self.health_worker = None
+
+        self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.setWindowIcon(self.style().standardIcon(QStyle.SP_ComputerIcon))
-        self.resize(1000, 650)
+        self.resize(1000, 700)
 
         # Settings
         self.settings = QSettings(APP_ORG, APP_NAME)
@@ -483,13 +682,11 @@ class MainWindow(QMainWindow):
         side = QVBoxLayout()
         self.btn_dashboard = QPushButton("Dashboard")
         self.btn_wifi = QPushButton("WiFi")
-        self.btn_wifi.setMinimumHeight(36)
         self.btn_dashboard.setCheckable(True)
         self.btn_dashboard.setChecked(True)
 
         side.addWidget(self.btn_dashboard)
         side.addWidget(self.btn_wifi)
-        self.btn_wifi.clicked.connect(self.open_wifi_dialog)
         side.addStretch(1)
 
         side_wrap = QWidget()
@@ -498,17 +695,17 @@ class MainWindow(QMainWindow):
         side_wrap.setObjectName("Sidebar")
         side_wrap.setStyleSheet(
             "#Sidebar {border-right: 1px solid palette(mid); padding: 8px;}\n"
-            "QPushButton {text-align: left; padding: 6px 10px;}\n"
-            "QPushButton:checked {font-weight: 600;}"
+            "QPushButton {text-align: left; padding: 10px; min-height: 44px;}\n"
+            "QPushButton:checked {font-weight: 600; background: #e8f8f2;}"
         )
 
         # Pages
         self.pages = QStackedWidget()
         self.page_dashboard = DashboardPage()
 
-        # Try to read the frequency from .env -> BROADCAST_CMD
+        # Load frequency from env file
         freq_from_env = extract_current_frequency(ENV_PATH)
-        if freq_from_env is not None:
+        if freq_from_env is not None and validate_frequency(freq_from_env):
             self.page_dashboard.freq_spin.setValue(freq_from_env)
 
         self.pages.addWidget(self.page_dashboard)
@@ -521,121 +718,174 @@ class MainWindow(QMainWindow):
         content.addWidget(self.pages, 1)
         root.addWidget(content_wrap, 1)
 
-        # Frequency settings & signals
+        # Restore saved frequency
         try:
             saved_freq = float(self.settings.value("radio/frequency", 90.8))
-        except Exception:
-            saved_freq = 90.8
-        self.page_dashboard.freq_spin.setValue(saved_freq)
+            if validate_frequency(saved_freq):
+                self.page_dashboard.freq_spin.setValue(saved_freq)
+        except (ValueError, TypeError):
+            pass
+
+        # Connect signals
         self.page_dashboard.freq_set.connect(self.on_set_frequency)
-
-        # Navigation
         self.btn_dashboard.clicked.connect(lambda: self._goto(0))
+        self.btn_wifi.clicked.connect(self.open_wifi_dialog)
 
-        # Tray
+        # System tray
         self._setup_tray()
 
-        # Touch-friendly
+        # Touch-friendly styling
         self.setStyleSheet("""
             QPushButton { min-height: 44px; font-size: 16px; }
             QDoubleSpinBox { min-height: 44px; font-size: 16px; }
+            QCheckBox { min-height: 36px; font-size: 15px; }
         """)
 
-    # ---------- Broadcast via QProcess with hot-reload ----------
+        # Start health monitoring
+        self._start_health_monitoring()
+
+    # ---------- Frequency Control ----------
+
     def on_set_frequency(self, freq: float, immediate: bool):
+        """Handle frequency change request."""
+        # Save frequency
         self.settings.setValue("radio/frequency", float(freq))
-        if not (76.0 <= freq <= 108.0):
-            QMessageBox.warning(self, "Frequency", "Please choose 76.0–108.0 MHz.")
+
+        # Validate
+        if not validate_frequency(freq):
+            QMessageBox.warning(
+                self,
+                "Invalid Frequency",
+                f"Please choose a frequency between 76.0 and 108.0 MHz.\n\nYou entered: {freq:.1f} MHz"
+            )
             return
 
-        # 1) Build/refresh environment for command rendering
-        env_vars = os.environ.copy()
-        env_from_file = load_env_file(ENV_FILE)
-        env_vars.update(env_from_file)
-
-        # 2) Ensure GPU libs path (sudo pifm expects libbcm_host etc.)
-        if not env_vars.get("LD_LIBRARY_PATH"):
-            candidates = ["/opt/vc/lib", "/usr/lib/arm-linux-gnueabihf", "/usr/lib/aarch64-linux-gnu"]
-            existing = [d for d in candidates if os.path.exists(d)]
-            if existing:
-                env_vars["LD_LIBRARY_PATH"] = ":".join(existing)
-
-        # 3) Compute and persist new BROADCAST_CMD into ENV_FILE
-        tmpl = env_vars.get(
-            "BROADCAST_CMD",
-            "/usr/bin/sudo /usr/local/bin/pifm_broadcast.sh {file} -f {freq}",
-        )
-        new_cmd = render_broadcast_cmd(tmpl, freq)
-        env_vars["BROADCAST_CMD"] = new_cmd
         try:
-            write_env_key(ENV_FILE, "BROADCAST_CMD", new_cmd)
+            # Build environment
+            env_vars = os.environ.copy()
+            env_from_file = load_env_file(ENV_PATH)
+            env_vars.update(env_from_file)
+
+            # GPU libraries path for pifm
+            if not env_vars.get("LD_LIBRARY_PATH"):
+                candidates = ["/opt/vc/lib", "/usr/lib/arm-linux-gnueabihf", "/usr/lib/aarch64-linux-gnu"]
+                existing = [d for d in candidates if os.path.exists(d)]
+                if existing:
+                    env_vars["LD_LIBRARY_PATH"] = ":".join(existing)
+
+            # Compute and persist new BROADCAST_CMD
+            tmpl = env_vars.get(
+                "BROADCAST_CMD",
+                "/usr/bin/sudo /usr/local/bin/pifm {file} -f {freq}",
+            )
+            new_cmd = render_broadcast_cmd(tmpl, freq)
+            env_vars["BROADCAST_CMD"] = new_cmd
+
+            write_env_key(ENV_PATH, "BROADCAST_CMD", new_cmd)
+
         except Exception as e:
-            QMessageBox.critical(self, "Env write error", f"Could not update {ENV_FILE}:\n{e}")
+            QMessageBox.critical(
+                self,
+                "Configuration Error",
+                f"Failed to update configuration:\n{e}"
+            )
             return
 
         log = self.page_dashboard.log
-        log.append(f"\nBROADCAST_CMD -> {new_cmd}")
+        log.append(f"\n[{self._timestamp()}] Frequency set to {freq:.1f} MHz")
+        log.append(f"BROADCAST_CMD updated: {new_cmd}")
 
-        # 4) If broadcaster is running, just signal it. Else, start it.
+        # Signal running service or start it
         running = self.proc and self.proc.state() != QProcess.NotRunning
+
         if running:
             pid = int(self.proc.processId())
             try:
                 if immediate:
-                    os.kill(pid, signal.SIGUSR2)  # abort current & reload
-                    log.append("Sent SIGUSR2 for immediate switch")
+                    os.kill(pid, signal.SIGUSR2)
+                    log.append(f"Sent SIGUSR2 to PID {pid} (immediate switch)")
                 else:
-                    os.kill(pid, signal.SIGHUP)   # gentle reload after current
-                    log.append("Sent SIGHUP for gentle reload")
+                    os.kill(pid, signal.SIGHUP)
+                    log.append(f"Sent SIGHUP to PID {pid} (reload after current message)")
+            except ProcessLookupError:
+                log.append(f"Process {pid} not found, restarting service...")
+                self._start_broadcaster_with_env(env_vars, fresh=True)
             except Exception as e:
-                log.append(f"Failed to signal process ({e}); restarting instead…")
+                log.append(f"Failed to signal process: {e}")
                 self._start_broadcaster_with_env(env_vars, fresh=True)
         else:
+            log.append("Service not running, starting...")
             self._start_broadcaster_with_env(env_vars, fresh=True)
 
         QMessageBox.information(
-            self, "Broadcast",
-            f"{'Switching now' if immediate else 'Will switch after current message'} to {freq:.1f} MHz"
+            self,
+            "Frequency Updated",
+            f"Broadcasting frequency {'switched to' if immediate else 'will switch to'} {freq:.1f} MHz"
         )
 
     def _start_broadcaster_with_env(self, env_vars: dict, fresh: bool = False):
+        """Start the broadcaster service with given environment."""
         if fresh:
             self._stop_script()
 
-        # Log command line
         log = self.page_dashboard.log
-        py = PYTHON_BIN if os.path.isfile(PYTHON_BIN) else sys.executable
-        log.append(f"$ {py} {SCRIPT_PATH}")
 
-        # Start QProcess if not running
+        # Determine Python executable
+        py = PYTHON_BIN if os.path.isfile(PYTHON_BIN) else sys.executable
+
+        # Check if service executable exists
+        if not os.path.exists(SERVICE_PATH):
+            log.append(f"\nERROR: Service not found at {SERVICE_PATH}")
+            QMessageBox.critical(
+                self,
+                "Service Not Found",
+                f"Cannot find broadcaster service at:\n{SERVICE_PATH}\n\n"
+                f"Please ensure the service is properly installed."
+            )
+            return
+
+        log.append(f"\n[{self._timestamp()}] Starting service: {py} {SERVICE_PATH}")
+
+        # Create QProcess if needed
         if not (self.proc and self.proc.state() != QProcess.NotRunning):
             self.proc = QProcess(self)
             self.proc.setProcessChannelMode(QProcess.MergedChannels)
             self.proc.readyReadStandardOutput.connect(self._on_ready_read)
             self.proc.finished.connect(self._on_finished)
 
-        # Pass environment (including updated BROADCAST_CMD)
+        # Set environment
         penv = self.proc.processEnvironment()
         penv.clear()
         for k, v in env_vars.items():
             penv.insert(k, v)
         self.proc.setProcessEnvironment(penv)
 
-        self.proc.start(py, [SCRIPT_PATH])
-        if not self.proc.waitForStarted(3000):
-            QMessageBox.critical(self, "Error", "Failed to start the broadcaster.")
+        # Start process
+        self.proc.start(py, [SERVICE_PATH])
+        if not self.proc.waitForStarted(5000):
+            log.append(f"ERROR: Failed to start service")
+            QMessageBox.critical(self, "Startup Failed", "Failed to start the broadcaster service.")
             self.proc = None
-            return
 
     def _stop_script(self):
+        """Stop the running broadcaster process."""
         if self.proc and self.proc.state() != QProcess.NotRunning:
+            log = self.page_dashboard.log
+            log.append(f"\n[{self._timestamp()}] Stopping service...")
+
             self.proc.terminate()
-            if not self.proc.waitForFinished(2000):
+            if not self.proc.waitForFinished(3000):
+                log.append("Service did not terminate gracefully, forcing shutdown...")
                 self.proc.kill()
+                self.proc.waitForFinished(1000)
+
+            log.append("Service stopped")
         self.proc = None
 
-    # ---------- QProcess output plumbing ----------
+    # ---------- QProcess Output ----------
+
     def _on_ready_read(self):
+        """Handle output from broadcaster process."""
         if not self.proc:
             return
         data = bytes(self.proc.readAllStandardOutput()).decode(errors="ignore")
@@ -647,66 +897,123 @@ class MainWindow(QMainWindow):
             self.page_dashboard.log.ensureCursorVisible()
 
     def _on_finished(self, exitCode, exitStatus):
-        self.page_dashboard.log.append(f"\n[process exited: code={exitCode}]")
+        """Handle broadcaster process exit."""
+        status_str = "normal" if exitStatus == QProcess.NormalExit else "crashed"
+        self.page_dashboard.log.append(
+            f"\n[{self._timestamp()}] Process exited: code={exitCode}, status={status_str}"
+        )
+
+    # ---------- Health Monitoring ----------
+
+    def _start_health_monitoring(self):
+        """Start background health monitoring."""
+        self.health_worker = HealthMonitorWorker()
+        self.health_worker.metrics_updated.connect(self.page_dashboard.update_service_status)
+        self.health_worker.start()
+
+    def _stop_health_monitoring(self):
+        """Stop background health monitoring."""
+        if self.health_worker:
+            self.health_worker.stop()
+            self.health_worker.wait(2000)
+            self.health_worker = None
 
     # ---------- Wi-Fi ----------
+
     def open_wifi_dialog(self):
+        """Open WiFi management dialog."""
         dlg = WifiDialog(self)
         dlg.exec_()
 
     # ---------- Navigation ----------
+
     def _goto(self, index: int):
+        """Navigate to page by index."""
         self.pages.setCurrentIndex(index)
         self.btn_dashboard.setChecked(index == 0)
 
-    # ---------- Tray ----------
+    # ---------- System Tray ----------
+
     def _setup_tray(self):
+        """Setup system tray icon."""
         if not QSystemTrayIcon.isSystemTrayAvailable():
             return
+
         self.tray = QSystemTrayIcon(self)
         self.tray.setIcon(self.style().standardIcon(QStyle.SP_ComputerIcon))
+
         menu = QMenu()
         act_show = menu.addAction("Show / Hide")
         act_quit = menu.addAction("Quit")
+
         act_show.triggered.connect(self._toggle_visible)
-        act_quit.triggered.connect(QApplication.instance().quit)
+        act_quit.triggered.connect(self._safe_quit)
+
         self.tray.setContextMenu(menu)
         self.tray.setToolTip(APP_NAME)
         self.tray.show()
 
     def _toggle_visible(self):
+        """Toggle window visibility."""
         self.setVisible(not self.isVisible())
 
-    # ---------- Settings ----------
+    def _safe_quit(self):
+        """Safely quit application."""
+        self._stop_script()
+        self._stop_health_monitoring()
+        QApplication.instance().quit()
+
+    # ---------- Settings & Cleanup ----------
+
     def closeEvent(self, e):
+        """Handle window close event."""
         self.settings.setValue("ui/geometry", self.saveGeometry())
-        try:
-            self._stop_script()
-        except Exception:
-            pass
+
+        # Stop background workers
+        self._stop_health_monitoring()
+
+        # Stop service (optional - service can continue running)
+        # Uncomment if you want to stop service on dashboard close:
+        # self._stop_script()
+
         super().closeEvent(e)
 
     def _restore_geometry(self):
+        """Restore window geometry from settings."""
         geo = self.settings.value("ui/geometry")
         if geo is not None:
             self.restoreGeometry(geo)
 
+    def _timestamp(self):
+        """Get formatted timestamp for logging."""
+        import datetime
+        return datetime.datetime.now().strftime("%H:%M:%S")
+
 
 # =============================
-# App entry
+# Application Entry Point
 # =============================
+
 def main():
+    """Main application entry point."""
+    # High DPI support
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_SynthesizeMouseForUnhandledTouchEvents, True)
     QApplication.setAttribute(Qt.AA_SynthesizeTouchForUnhandledMouseEvents, True)
 
     app = QApplication(sys.argv)
+
+    # Apply theme
     apply_theme(app)
+
+    # Set organization/app name for QSettings
     app.setOrganizationName(APP_ORG)
     app.setApplicationName(APP_NAME)
 
+    # Create and show main window
     w = MainWindow()
     w.show()
+
     sys.exit(app.exec_())
 
 
