@@ -2,6 +2,9 @@
 boto3==1.34.22
 botocore==1.34.22
 
+# HTTP requests library
+requests>=2.31.0
+
 # Dashboard GUI (optional, only needed for PyQt5 dashboard)
 PyQt5>=5.15.0
 
