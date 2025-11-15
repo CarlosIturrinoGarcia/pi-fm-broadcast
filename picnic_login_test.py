@@ -47,7 +47,9 @@ def login_to_picnic(
     # Prepare the request
     headers = {
         "Content-Type": "application/json",
-        "Accept-Language": "en"
+        "Accept-Language": "en",
+        "User-Agent": "PicnicApp/1.0",
+        "Accept": "application/json"
     }
 
     payload = {
