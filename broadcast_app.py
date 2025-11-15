@@ -23,6 +23,7 @@ import re
 import signal
 import subprocess
 import json
+import hashlib
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -509,6 +510,175 @@ class WifiDialog(QDialog):
         else:
             self.info.setText("Error: " + str(payload))
             QMessageBox.critical(self, "Wi-Fi Error", str(payload))
+
+
+# =============================
+# Login Dialog
+# =============================
+
+class LoginDialog(QDialog):
+    """Login dialog with username/password authentication."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("FM Broadcast Login")
+        self.setModal(True)
+        self.resize(500, 420)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+
+        # Main layout
+        v = QVBoxLayout(self)
+        v.setSpacing(16)
+
+        # Title
+        title = QLabel("FM Broadcast Dashboard")
+        title.setStyleSheet("font-size: 24px; font-weight: 600; padding: 12px;")
+        title.setAlignment(Qt.AlignCenter)
+        v.addWidget(title)
+
+        subtitle = QLabel("Please log in to continue")
+        subtitle.setStyleSheet("font-size: 14px; color: #666; padding-bottom: 12px;")
+        subtitle.setAlignment(Qt.AlignCenter)
+        v.addWidget(subtitle)
+
+        # Form
+        form = QFormLayout()
+        form.setSpacing(12)
+
+        self.username_input = QLineEdit()
+        self.username_input.setPlaceholderText("Enter username")
+        self.username_input.setMinimumHeight(44)
+        self.username_input.setStyleSheet("font-size: 16px;")
+
+        self.password_input = QLineEdit()
+        self.password_input.setPlaceholderText("Enter password")
+        self.password_input.setEchoMode(QLineEdit.Password)
+        self.password_input.setMinimumHeight(44)
+        self.password_input.setStyleSheet("font-size: 16px;")
+        self.password_input.returnPressed.connect(self.validate_login)
+
+        form.addRow("Username:", self.username_input)
+        form.addRow("Password:", self.password_input)
+        v.addLayout(form)
+
+        # Error message label
+        self.error_label = QLabel("")
+        self.error_label.setStyleSheet("color: #e74c3c; font-weight: 600; padding: 6px;")
+        self.error_label.setAlignment(Qt.AlignCenter)
+        self.error_label.setVisible(False)
+        v.addWidget(self.error_label)
+
+        # On-screen keyboard
+        self.keyboard = OnScreenKeyboard(self)
+        self.keyboard.setVisible(False)
+        v.addWidget(self.keyboard)
+
+        # Show keyboard on focus
+        self.username_input.focusInEvent = lambda e: (
+            self.keyboard.set_target(self.username_input),
+            self.keyboard.setVisible(True),
+            QLineEdit.focusInEvent(self.username_input, e)
+        )
+        self.password_input.focusInEvent = lambda e: (
+            self.keyboard.set_target(self.password_input),
+            self.keyboard.setVisible(True),
+            QLineEdit.focusInEvent(self.password_input, e)
+        )
+
+        # Buttons
+        btns = QDialogButtonBox()
+        self.login_btn = btns.addButton("Login", QDialogButtonBox.AcceptRole)
+        self.cancel_btn = btns.addButton("Cancel", QDialogButtonBox.RejectRole)
+
+        self.login_btn.setMinimumHeight(44)
+        self.cancel_btn.setMinimumHeight(44)
+        self.cancel_btn.setObjectName("secondary")
+
+        btns.accepted.connect(self.validate_login)
+        btns.rejected.connect(self.reject)
+        v.addWidget(btns)
+
+        # Set initial focus
+        self.username_input.setFocus(Qt.OtherFocusReason)
+
+        # Track failed login attempts
+        self.failed_attempts = 0
+        self.max_attempts = 5
+
+    def validate_login(self):
+        """Validate login credentials."""
+        username = self.username_input.text().strip()
+        password = self.password_input.text().strip()
+
+        # Check if inputs are empty
+        if not username or not password:
+            self.show_error("Please enter both username and password")
+            return
+
+        # Check against environment variables
+        if self.check_credentials(username, password):
+            self.accept()
+        else:
+            self.failed_attempts += 1
+            remaining = self.max_attempts - self.failed_attempts
+
+            if self.failed_attempts >= self.max_attempts:
+                self.show_error("Too many failed attempts. Access denied.")
+                QTimer.singleShot(2000, self.reject)
+            else:
+                self.show_error(f"Invalid credentials. {remaining} attempts remaining.")
+                self.password_input.clear()
+                self.password_input.setFocus()
+
+    def check_credentials(self, username: str, password: str) -> bool:
+        """
+        Check credentials against environment variables.
+
+        Supports two modes:
+        1. DASHBOARD_USERNAME + DASHBOARD_PASSWORD_HASH (SHA256)
+        2. DASHBOARD_PIN (simple numeric PIN for touchscreens)
+
+        Args:
+            username: Entered username
+            password: Entered password
+
+        Returns:
+            True if credentials are valid
+        """
+        # Load environment from broadcast.env
+        env_vars = load_env_file(ENV_PATH)
+
+        # Mode 1: Simple PIN authentication (for touchscreens)
+        pin = env_vars.get("DASHBOARD_PIN", os.getenv("DASHBOARD_PIN"))
+        if pin and pin == password:
+            return True
+
+        # Mode 2: Username + Password Hash authentication
+        expected_username = env_vars.get("DASHBOARD_USERNAME", os.getenv("DASHBOARD_USERNAME", "admin"))
+        password_hash = env_vars.get("DASHBOARD_PASSWORD_HASH", os.getenv("DASHBOARD_PASSWORD_HASH"))
+
+        # If no password hash is set, use default for first-time setup
+        if not password_hash and not pin:
+            # Default credentials: admin/admin (for initial setup only)
+            default_hash = hashlib.sha256(b"admin").hexdigest()
+            if username == expected_username and hashlib.sha256(password.encode()).hexdigest() == default_hash:
+                return True
+
+        # Validate username
+        if username != expected_username:
+            return False
+
+        # Validate password hash
+        if password_hash:
+            computed_hash = hashlib.sha256(password.encode()).hexdigest()
+            return computed_hash == password_hash
+
+        return False
+
+    def show_error(self, message: str):
+        """Display error message."""
+        self.error_label.setText(message)
+        self.error_label.setVisible(True)
 
 
 # =============================
@@ -1010,7 +1180,13 @@ def main():
     app.setOrganizationName(APP_ORG)
     app.setApplicationName(APP_NAME)
 
-    # Create and show main window
+    # Show login dialog first
+    login = LoginDialog()
+    if login.exec_() != QDialog.Accepted:
+        # User cancelled or failed login
+        sys.exit(0)
+
+    # User authenticated successfully, show main window
     w = MainWindow()
     w.show()
 
