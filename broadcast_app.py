@@ -24,8 +24,19 @@ import signal
 import subprocess
 import json
 import hashlib
+import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
 
 from theme import apply_theme
 from config import (
@@ -1233,6 +1244,7 @@ class MessageListScreen(QWidget):
     def refresh_messages(self):
         """Refresh messages from the API."""
         from message_broadcaster import MessageFetchError
+        import traceback
 
         if not self.current_group_id:
             self.status_label.setText("No group selected")
@@ -1244,26 +1256,34 @@ class MessageListScreen(QWidget):
             self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #e74c3c;")
             return
 
-        self.status_label.setText("Loading messages...")
+        self.status_label.setText(f"Loading messages for group {self.current_group_id}...")
         self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #3498db;")
         self.btn_refresh.setEnabled(False)
         QApplication.processEvents()
 
         try:
+            print(f"\n=== FETCHING MESSAGES ===")
+            print(f"Group ID: {self.current_group_id}")
+            print(f"Group Name: {self.current_group_name}")
+
             # Fetch messages
             messages = self.broadcaster.get_group_messages(self.current_group_id, limit=50)
             self.messages_data = messages
+
+            print(f"Received {len(messages)} messages")
 
             # Clear and populate list
             self.messages_list.clear()
 
             if not messages:
-                self.status_label.setText("No messages found in this group")
+                self.status_label.setText("No text messages found in this group")
                 self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #95a5a6;")
+                print("No messages to display")
                 return
 
             # Add messages to list
-            for msg in messages:
+            for i, msg in enumerate(messages):
+                print(f"\nMessage {i+1}: {msg.get('message', '')[:50]}...")
                 formatted = self.broadcaster.format_message_for_display(msg)
                 display_text = formatted["display_text"]
 
@@ -1271,16 +1291,37 @@ class MessageListScreen(QWidget):
                 item.setData(Qt.UserRole, msg)  # Store original message data
                 self.messages_list.addItem(item)
 
-            self.status_label.setText(f"Loaded {len(messages)} message(s) successfully")
+            self.status_label.setText(f"✓ Loaded {len(messages)} message(s) successfully")
             self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #2ecc94;")
+            print(f"Successfully displayed {len(messages)} messages")
 
         except MessageFetchError as e:
-            self.status_label.setText(f"Error: {str(e)}")
+            error_msg = str(e)
+            self.status_label.setText(f"Error: {error_msg}")
             self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #e74c3c;")
+            print(f"MessageFetchError: {error_msg}")
+            traceback.print_exc()
+
+            # Show detailed error dialog
+            QMessageBox.critical(
+                self,
+                "Failed to Load Messages",
+                f"Could not load messages from group.\n\n{error_msg}\n\nCheck the console for details."
+            )
 
         except Exception as e:
-            self.status_label.setText(f"Unexpected error: {str(e)}")
+            error_msg = str(e)
+            self.status_label.setText(f"Unexpected error: {error_msg}")
             self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #e74c3c;")
+            print(f"Unexpected error: {error_msg}")
+            traceback.print_exc()
+
+            # Show detailed error dialog
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"Unexpected error loading messages.\n\n{error_msg}\n\nCheck the console for details."
+            )
 
         finally:
             self.btn_refresh.setEnabled(True)
