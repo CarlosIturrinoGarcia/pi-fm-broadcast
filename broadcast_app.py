@@ -1010,11 +1010,26 @@ class GroupsPage(QWidget):
         if not group:
             return
 
-        group_id = group.get("id", "")
+        # Try different possible ID field names
+        group_id = (
+            group.get("id") or
+            group.get("_id") or
+            group.get("group_id") or
+            group.get("event_id") or
+            ""
+        )
+
+        # Get group name
         group_name = group.get("name", "Unknown Group")
 
         if not group_id:
-            QMessageBox.warning(self, "Error", "Selected group has no ID")
+            # Debug: Show what fields are available
+            available_fields = ", ".join(group.keys()) if group else "none"
+            QMessageBox.warning(
+                self,
+                "Error",
+                f"Selected group has no ID field.\n\nAvailable fields: {available_fields}"
+            )
             return
 
         # Get parent window and switch to messages page
