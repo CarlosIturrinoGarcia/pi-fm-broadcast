@@ -914,6 +914,63 @@ class MainWindow(QMainWindow):
         # Start health monitoring
         self._start_health_monitoring()
 
+        # Check WiFi connection on startup (delayed to ensure window is shown)
+        QTimer.singleShot(500, self._check_wifi_on_startup)
+
+    # ---------- WiFi Connection Check ----------
+
+    def _check_wifi_on_startup(self):
+        """Check WiFi connection status on startup and prompt if not connected."""
+        if not self._is_wifi_connected():
+            reply = QMessageBox.question(
+                self,
+                "WiFi Not Connected",
+                "No active WiFi connection detected.\n\n"
+                "Would you like to configure WiFi now?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            if reply == QMessageBox.Yes:
+                self.open_wifi_dialog()
+
+    def _is_wifi_connected(self) -> bool:
+        """
+        Check if WiFi is connected.
+
+        Returns:
+            True if WiFi is connected, False otherwise
+        """
+        try:
+            # Check network connectivity using nmcli
+            result = subprocess.run(
+                ["nmcli", "-t", "-f", "STATE", "general"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                state = result.stdout.strip()
+                # States: connected, connected (local only), connected (site only), disconnected
+                return "connected" in state.lower()
+        except FileNotFoundError:
+            # nmcli not available, try alternative method using ip route
+            try:
+                result = subprocess.run(
+                    ["ip", "route", "get", "8.8.8.8"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                # If we can get a route to 8.8.8.8, we have internet connectivity
+                return result.returncode == 0
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+        except subprocess.TimeoutExpired:
+            pass
+
+        # If all checks fail, assume connected to avoid false positives
+        return True
+
     # ---------- Frequency Control ----------
 
     def on_set_frequency(self, freq: float, immediate: bool):
