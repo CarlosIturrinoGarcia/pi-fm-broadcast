@@ -516,6 +516,21 @@ class WifiDialog(QDialog):
 # Login Dialog
 # =============================
 
+class KeyboardLineEdit(QLineEdit):
+    """QLineEdit that shows on-screen keyboard on focus."""
+
+    def __init__(self, keyboard: 'OnScreenKeyboard', *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._keyboard = keyboard
+
+    def focusInEvent(self, event):
+        """Override to show keyboard when focused."""
+        super().focusInEvent(event)
+        if self._keyboard:
+            self._keyboard.set_target(self)
+            self._keyboard.setVisible(True)
+
+
 class LoginDialog(QDialog):
     """Login dialog with username/password authentication."""
 
@@ -541,16 +556,20 @@ class LoginDialog(QDialog):
         subtitle.setAlignment(Qt.AlignCenter)
         v.addWidget(subtitle)
 
+        # On-screen keyboard (create before inputs)
+        self.keyboard = OnScreenKeyboard(self)
+        self.keyboard.setVisible(False)
+
         # Form
         form = QFormLayout()
         form.setSpacing(12)
 
-        self.username_input = QLineEdit()
+        self.username_input = KeyboardLineEdit(self.keyboard)
         self.username_input.setPlaceholderText("Enter username")
         self.username_input.setMinimumHeight(44)
         self.username_input.setStyleSheet("font-size: 16px;")
 
-        self.password_input = QLineEdit()
+        self.password_input = KeyboardLineEdit(self.keyboard)
         self.password_input.setPlaceholderText("Enter password")
         self.password_input.setEchoMode(QLineEdit.Password)
         self.password_input.setMinimumHeight(44)
@@ -568,22 +587,8 @@ class LoginDialog(QDialog):
         self.error_label.setVisible(False)
         v.addWidget(self.error_label)
 
-        # On-screen keyboard
-        self.keyboard = OnScreenKeyboard(self)
-        self.keyboard.setVisible(False)
+        # Add keyboard widget
         v.addWidget(self.keyboard)
-
-        # Show keyboard on focus
-        self.username_input.focusInEvent = lambda e: (
-            self.keyboard.set_target(self.username_input),
-            self.keyboard.setVisible(True),
-            QLineEdit.focusInEvent(self.username_input, e)
-        )
-        self.password_input.focusInEvent = lambda e: (
-            self.keyboard.set_target(self.password_input),
-            self.keyboard.setVisible(True),
-            QLineEdit.focusInEvent(self.password_input, e)
-        )
 
         # Buttons
         btns = QDialogButtonBox()
