@@ -896,6 +896,34 @@ class GroupsPage(QWidget):
         self.details_text.setMinimumHeight(200)
 
         details_layout.addWidget(self.details_text)
+
+        # View Messages button
+        self.btn_view_messages = QPushButton("📻 View & Broadcast Messages")
+        self.btn_view_messages.setMinimumHeight(60)
+        self.btn_view_messages.setStyleSheet("""
+            QPushButton {
+                font-size: 18px;
+                font-weight: 600;
+                background-color: #4CAF50;
+                color: white;
+                border-radius: 8px;
+                padding: 12px 24px;
+            }
+            QPushButton:hover {
+                background-color: #388E3C;
+            }
+            QPushButton:pressed {
+                background-color: #1B5E20;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        self.btn_view_messages.setEnabled(False)
+        self.btn_view_messages.clicked.connect(self.view_group_messages)
+        details_layout.addWidget(self.btn_view_messages)
+
         details_group.setLayout(details_layout)
 
         # Status label
@@ -979,6 +1007,9 @@ class GroupsPage(QWidget):
         if not group:
             return
 
+        # Enable the View Messages button
+        self.btn_view_messages.setEnabled(True)
+
         # Format group details for display
         details = []
         details.append(f"<h3>{group.get('name', 'Unknown Group')}</h3>")
@@ -998,6 +1029,376 @@ class GroupsPage(QWidget):
                 details.append(f"<p><strong>{formatted_key}:</strong> {value}</p>")
 
         self.details_text.setHtml("".join(details))
+
+    def view_group_messages(self):
+        """Navigate to message list screen for selected group."""
+        item = self.groups_list.currentItem()
+        if not item:
+            return
+
+        group = item.data(Qt.UserRole)
+        group_id = group.get("id", "")
+        group_name = group.get("name", "Unknown Group")
+
+        if not group_id:
+            QMessageBox.warning(self, "Error", "Selected group has no ID")
+            return
+
+        # Get parent window and switch to messages page
+        parent_window = self.window()
+        if hasattr(parent_window, 'page_messages') and hasattr(parent_window, '_goto'):
+            # Get current frequency from dashboard
+            frequency = 90.8
+            if hasattr(parent_window, 'page_dashboard'):
+                frequency = parent_window.page_dashboard.freq_spin.value()
+
+            # Set the group and navigate
+            parent_window.page_messages.set_group(group_id, group_name, frequency)
+            parent_window._goto(2)  # Navigate to messages page
+
+
+class MessageListScreen(QWidget):
+    """Message list screen for viewing and broadcasting group messages."""
+
+    def __init__(self, api_client, parent=None):
+        super().__init__(parent)
+        self.api_client = api_client
+        self.broadcaster = None
+        self.current_group_id = None
+        self.current_group_name = "Unknown Group"
+        self.current_frequency = 90.8
+        self.messages_data = []
+
+        # Main layout
+        lay = QVBoxLayout(self)
+        lay.setSpacing(12)
+        lay.setContentsMargins(16, 16, 16, 16)
+
+        # Header section
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(12)
+
+        # Group name and frequency display
+        self.header_label = QLabel("Group Messages")
+        self.header_label.setStyleSheet(
+            "font-size: 24px; font-weight: 600; color: white; "
+            "background-color: #2196F3; padding: 15px; border-radius: 8px;"
+        )
+        self.header_label.setAlignment(Qt.AlignCenter)
+
+        header_layout.addWidget(self.header_label, 1)
+        lay.addLayout(header_layout)
+
+        # Messages list
+        messages_group = QGroupBox("Messages")
+        messages_group.setStyleSheet("QGroupBox { font-size: 18px; font-weight: 600; }")
+        messages_layout = QVBoxLayout()
+
+        self.messages_list = QListWidget()
+        self.messages_list.setSelectionMode(QListWidget.MultiSelection)
+        self.messages_list.setStyleSheet("""
+            QListWidget {
+                font-size: 16px;
+                border: 2px solid #ddd;
+                border-radius: 6px;
+            }
+            QListWidget::item {
+                padding: 15px;
+                border-bottom: 1px solid #eee;
+                min-height: 60px;
+            }
+            QListWidget::item:selected {
+                background-color: #e3f2fd;
+                color: #1976d2;
+                font-weight: 600;
+            }
+            QListWidget::item:hover {
+                background-color: #f5f5f5;
+            }
+        """)
+        self.messages_list.setMinimumHeight(400)
+
+        messages_layout.addWidget(self.messages_list)
+        messages_group.setLayout(messages_layout)
+        lay.addWidget(messages_group, 1)
+
+        # Status label
+        self.status_label = QLabel("Select a group to view messages")
+        self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #666;")
+        self.status_label.setWordWrap(True)
+        self.status_label.setAlignment(Qt.AlignCenter)
+        lay.addWidget(self.status_label)
+
+        # Action buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(12)
+
+        self.btn_back = QPushButton("← Back")
+        self.btn_back.setMinimumHeight(60)
+        self.btn_back.setStyleSheet("""
+            QPushButton {
+                font-size: 18px;
+                font-weight: 600;
+                background-color: #f44336;
+                color: white;
+                border-radius: 8px;
+                padding: 12px 24px;
+            }
+            QPushButton:hover {
+                background-color: #d32f2f;
+            }
+            QPushButton:pressed {
+                background-color: #b71c1c;
+            }
+        """)
+        self.btn_back.clicked.connect(self.go_back)
+
+        self.btn_refresh = QPushButton("🔄 Refresh Messages")
+        self.btn_refresh.setMinimumHeight(60)
+        self.btn_refresh.setStyleSheet("""
+            QPushButton {
+                font-size: 18px;
+                font-weight: 600;
+                background-color: #2196F3;
+                color: white;
+                border-radius: 8px;
+                padding: 12px 24px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:pressed {
+                background-color: #0D47A1;
+            }
+        """)
+        self.btn_refresh.clicked.connect(self.refresh_messages)
+
+        self.btn_broadcast = QPushButton("📻 Broadcast Selected")
+        self.btn_broadcast.setMinimumHeight(60)
+        self.btn_broadcast.setStyleSheet("""
+            QPushButton {
+                font-size: 18px;
+                font-weight: 600;
+                background-color: #4CAF50;
+                color: white;
+                border-radius: 8px;
+                padding: 12px 24px;
+            }
+            QPushButton:hover {
+                background-color: #388E3C;
+            }
+            QPushButton:pressed {
+                background-color: #1B5E20;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        self.btn_broadcast.clicked.connect(self.broadcast_selected)
+        self.btn_broadcast.setEnabled(False)
+
+        btn_layout.addWidget(self.btn_back)
+        btn_layout.addWidget(self.btn_refresh)
+        btn_layout.addWidget(self.btn_broadcast, 1)
+        lay.addLayout(btn_layout)
+
+        # Connect selection change
+        self.messages_list.itemSelectionChanged.connect(self._on_selection_changed)
+
+    def set_group(self, group_id: str, group_name: str, frequency: float = 90.8):
+        """
+        Set the group to display messages for.
+
+        Args:
+            group_id: The group ID
+            group_name: The group name for display
+            frequency: FM frequency for broadcasting
+        """
+        self.current_group_id = group_id
+        self.current_group_name = group_name
+        self.current_frequency = frequency
+
+        # Update header
+        self.header_label.setText(f"{group_name} • {frequency:.1f} MHz")
+
+        # Initialize broadcaster with current token
+        if self.api_client and self.api_client._access_token:
+            from message_broadcaster import PicnicMessageBroadcaster
+            # Get TTS endpoint from environment
+            env_vars = load_env_file(ENV_PATH)
+            tts_endpoint = env_vars.get("TTS_ENDPOINT", os.getenv("TTS_ENDPOINT", ""))
+            self.broadcaster = PicnicMessageBroadcaster(
+                self.api_client._access_token,
+                tts_endpoint
+            )
+
+        # Auto-load messages
+        self.refresh_messages()
+
+    def refresh_messages(self):
+        """Refresh messages from the API."""
+        from message_broadcaster import MessageFetchError
+
+        if not self.current_group_id:
+            self.status_label.setText("No group selected")
+            self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #e74c3c;")
+            return
+
+        if not self.broadcaster:
+            self.status_label.setText("Not authenticated. Please login again.")
+            self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #e74c3c;")
+            return
+
+        self.status_label.setText("Loading messages...")
+        self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #3498db;")
+        self.btn_refresh.setEnabled(False)
+        QApplication.processEvents()
+
+        try:
+            # Fetch messages
+            messages = self.broadcaster.get_group_messages(self.current_group_id, limit=50)
+            self.messages_data = messages
+
+            # Clear and populate list
+            self.messages_list.clear()
+
+            if not messages:
+                self.status_label.setText("No messages found in this group")
+                self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #95a5a6;")
+                return
+
+            # Add messages to list
+            for msg in messages:
+                formatted = self.broadcaster.format_message_for_display(msg)
+                display_text = formatted["display_text"]
+
+                item = QListWidgetItem(display_text)
+                item.setData(Qt.UserRole, msg)  # Store original message data
+                self.messages_list.addItem(item)
+
+            self.status_label.setText(f"Loaded {len(messages)} message(s) successfully")
+            self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #2ecc94;")
+
+        except MessageFetchError as e:
+            self.status_label.setText(f"Error: {str(e)}")
+            self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #e74c3c;")
+
+        except Exception as e:
+            self.status_label.setText(f"Unexpected error: {str(e)}")
+            self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #e74c3c;")
+
+        finally:
+            self.btn_refresh.setEnabled(True)
+
+    def broadcast_selected(self):
+        """Broadcast selected messages via TTS."""
+        from message_broadcaster import TTSBroadcastError
+
+        selected_items = self.messages_list.selectedItems()
+
+        if not selected_items:
+            QMessageBox.warning(self, "No Selection", "Please select at least one message to broadcast.")
+            return
+
+        if not self.broadcaster:
+            QMessageBox.critical(self, "Error", "Broadcaster not initialized. Please try again.")
+            return
+
+        # Confirm broadcast
+        reply = QMessageBox.question(
+            self,
+            "Confirm Broadcast",
+            f"Broadcast {len(selected_items)} message(s) on {self.current_frequency:.1f} MHz?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+
+        if reply != QMessageBox.Yes:
+            return
+
+        # Disable buttons during broadcast
+        self.btn_broadcast.setEnabled(False)
+        self.btn_refresh.setEnabled(False)
+        self.status_label.setText(f"Broadcasting {len(selected_items)} message(s)...")
+        self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #ff9800;")
+        QApplication.processEvents()
+
+        success_count = 0
+        error_count = 0
+
+        for item in selected_items:
+            msg = item.data(Qt.UserRole)
+            formatted = self.broadcaster.format_message_for_display(msg)
+
+            try:
+                # Broadcast the message
+                self.broadcaster.broadcast_message(
+                    formatted["message_text"],
+                    formatted["user_name"],
+                    self.current_frequency
+                )
+
+                # Visual feedback - green highlight
+                item.setBackground(Qt.green)
+                item.setForeground(Qt.darkGreen)
+                success_count += 1
+
+            except TTSBroadcastError as e:
+                # Visual feedback - red highlight
+                item.setBackground(Qt.red)
+                item.setForeground(Qt.white)
+                error_count += 1
+                logger.error(f"Failed to broadcast message: {e}")
+
+            except Exception as e:
+                item.setBackground(Qt.red)
+                item.setForeground(Qt.white)
+                error_count += 1
+                logger.error(f"Unexpected error broadcasting message: {e}")
+
+            QApplication.processEvents()
+
+        # Update status
+        if error_count == 0:
+            self.status_label.setText(f"✓ Successfully broadcast {success_count} message(s)")
+            self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #2ecc94; font-weight: 600;")
+            QMessageBox.information(
+                self,
+                "Broadcast Complete",
+                f"Successfully broadcast {success_count} message(s) on {self.current_frequency:.1f} MHz"
+            )
+        else:
+            self.status_label.setText(
+                f"Broadcast complete: {success_count} succeeded, {error_count} failed"
+            )
+            self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #ff9800; font-weight: 600;")
+            QMessageBox.warning(
+                self,
+                "Broadcast Completed with Errors",
+                f"{success_count} message(s) broadcast successfully\n{error_count} message(s) failed"
+            )
+
+        # Re-enable buttons
+        self.btn_broadcast.setEnabled(True)
+        self.btn_refresh.setEnabled(True)
+
+    def _on_selection_changed(self):
+        """Handle selection change in messages list."""
+        has_selection = len(self.messages_list.selectedItems()) > 0
+        self.btn_broadcast.setEnabled(has_selection)
+
+    def go_back(self):
+        """Navigate back to groups page."""
+        # Clear messages
+        self.messages_list.clear()
+        self.messages_data = []
+        self.current_group_id = None
+
+        # Signal parent to switch page
+        parent_window = self.window()
+        if hasattr(parent_window, '_goto'):
+            parent_window._goto(1)  # Go to Groups page
 
 
 # =============================
@@ -1059,6 +1460,7 @@ class MainWindow(QMainWindow):
         self.pages = QStackedWidget()
         self.page_dashboard = DashboardPage()
         self.page_groups = GroupsPage(api_client)
+        self.page_messages = MessageListScreen(api_client)
 
         # Load frequency from env file
         freq_from_env = extract_current_frequency(ENV_PATH)
@@ -1067,6 +1469,7 @@ class MainWindow(QMainWindow):
 
         self.pages.addWidget(self.page_dashboard)  # Index 0
         self.pages.addWidget(self.page_groups)     # Index 1
+        self.pages.addWidget(self.page_messages)   # Index 2
 
         # Compose
         root.addWidget(side_wrap)
