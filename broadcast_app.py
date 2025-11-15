@@ -534,8 +534,9 @@ class KeyboardLineEdit(QLineEdit):
 class LoginDialog(QDialog):
     """Login dialog with username/password authentication."""
 
-    def __init__(self, parent=None):
+    def __init__(self, api_client, parent=None):
         super().__init__(parent)
+        self.api_client = api_client
         self.setWindowTitle("FM Broadcast Login")
         self.setModal(True)
         self.resize(500, 420)
@@ -565,7 +566,7 @@ class LoginDialog(QDialog):
         form.setSpacing(12)
 
         self.username_input = KeyboardLineEdit(self.keyboard)
-        self.username_input.setPlaceholderText("Enter username")
+        self.username_input.setPlaceholderText("Enter email address")
         self.username_input.setMinimumHeight(44)
         self.username_input.setStyleSheet("font-size: 16px;")
 
@@ -576,7 +577,7 @@ class LoginDialog(QDialog):
         self.password_input.setStyleSheet("font-size: 16px;")
         self.password_input.returnPressed.connect(self.validate_login)
 
-        form.addRow("Username:", self.username_input)
+        form.addRow("Email:", self.username_input)
         form.addRow("Password:", self.password_input)
         v.addLayout(form)
 
@@ -611,19 +612,34 @@ class LoginDialog(QDialog):
         self.max_attempts = 5
 
     def validate_login(self):
-        """Validate login credentials."""
-        username = self.username_input.text().strip()
+        """Validate login credentials using Picnic API."""
+        from api_client import AuthenticationError, NetworkError, PicnicAPIError
+
+        email = self.username_input.text().strip()
         password = self.password_input.text().strip()
 
         # Check if inputs are empty
-        if not username or not password:
-            self.show_error("Please enter both username and password")
+        if not email or not password:
+            self.show_error("Please enter both email and password")
             return
 
-        # Check against environment variables
-        if self.check_credentials(username, password):
+        # Try local credentials first (fallback for offline mode)
+        if self.check_credentials(email, password):
             self.accept()
-        else:
+            return
+
+        # Disable login button while processing
+        self.login_btn.setEnabled(False)
+        self.login_btn.setText("Logging in...")
+        QApplication.processEvents()
+
+        try:
+            # Attempt API login
+            self.api_client.login(email, password)
+            # Success - close dialog
+            self.accept()
+
+        except AuthenticationError as e:
             self.failed_attempts += 1
             remaining = self.max_attempts - self.failed_attempts
 
@@ -634,6 +650,17 @@ class LoginDialog(QDialog):
                 self.show_error(f"Invalid credentials. {remaining} attempts remaining.")
                 self.password_input.clear()
                 self.password_input.setFocus()
+
+        except NetworkError as e:
+            self.show_error(f"Network error: {str(e)}")
+
+        except PicnicAPIError as e:
+            self.show_error(f"Login failed: {str(e)}")
+
+        finally:
+            # Re-enable login button
+            self.login_btn.setEnabled(True)
+            self.login_btn.setText("Login")
 
     def check_credentials(self, username: str, password: str) -> bool:
         """
@@ -828,6 +855,151 @@ class DashboardPage(QWidget):
         self.lbl_enabled_value.setText("Enabled" if is_enabled else "Disabled")
 
 
+class GroupsPage(QWidget):
+    """Groups page for displaying and managing Picnic Groups."""
+
+    def __init__(self, api_client, parent=None):
+        super().__init__(parent)
+        self.api_client = api_client
+        lay = QVBoxLayout(self)
+
+        # Title
+        title = QLabel("My Groups")
+        title.setStyleSheet("font-size: 22px; font-weight: 600;")
+
+        # Refresh button
+        refresh_layout = QHBoxLayout()
+        self.btn_refresh = QPushButton("Refresh Groups")
+        self.btn_refresh.setMinimumHeight(44)
+        self.btn_refresh.clicked.connect(self.load_groups)
+        refresh_layout.addWidget(self.btn_refresh)
+        refresh_layout.addStretch()
+
+        # Groups list
+        groups_group = QGroupBox("Groups")
+        groups_layout = QVBoxLayout()
+
+        self.groups_list = QListWidget()
+        self.groups_list.setMinimumHeight(300)
+        self.groups_list.itemClicked.connect(self.on_group_selected)
+
+        groups_layout.addWidget(self.groups_list)
+        groups_group.setLayout(groups_layout)
+
+        # Group details
+        details_group = QGroupBox("Group Details")
+        details_layout = QVBoxLayout()
+
+        self.details_text = QTextEdit()
+        self.details_text.setReadOnly(True)
+        self.details_text.setPlaceholderText("Select a group to view details...")
+        self.details_text.setMinimumHeight(200)
+
+        details_layout.addWidget(self.details_text)
+        details_group.setLayout(details_layout)
+
+        # Status label
+        self.status_label = QLabel("")
+        self.status_label.setWordWrap(True)
+
+        # Compose
+        lay.addWidget(title)
+        lay.addLayout(refresh_layout)
+        lay.addWidget(groups_group, 1)
+        lay.addWidget(details_group, 1)
+        lay.addWidget(self.status_label)
+
+        # Store groups data
+        self._groups_data = []
+
+    def showEvent(self, event):
+        """Called when the page is shown."""
+        super().showEvent(event)
+        # Auto-load groups when page is first shown
+        if not self._groups_data:
+            self.load_groups()
+
+    def load_groups(self):
+        """Load groups from the API."""
+        from api_client import TokenExpiredError, NetworkError, PicnicAPIError
+
+        self.status_label.setText("Loading groups...")
+        self.status_label.setStyleSheet("color: #3498db;")
+        self.btn_refresh.setEnabled(False)
+        QApplication.processEvents()  # Update UI immediately
+
+        try:
+            groups = self.api_client.get_my_groups()
+            self._groups_data = groups
+
+            # Clear and populate the list
+            self.groups_list.clear()
+
+            if not groups:
+                self.status_label.setText("No groups found.")
+                self.status_label.setStyleSheet("color: #95a5a6;")
+                return
+
+            for group in groups:
+                # Display group name or ID
+                group_name = group.get("name", group.get("id", "Unknown Group"))
+                item = QListWidgetItem(group_name)
+                item.setData(Qt.UserRole, group)  # Store full group data
+                self.groups_list.addItem(item)
+
+            self.status_label.setText(f"Loaded {len(groups)} group(s) successfully.")
+            self.status_label.setStyleSheet("color: #2ecc94;")
+
+        except TokenExpiredError as e:
+            self.status_label.setText(f"Session expired: {str(e)}")
+            self.status_label.setStyleSheet("color: #e74c3c;")
+            # Emit signal to show login dialog
+            QMessageBox.warning(self, "Session Expired", "Your session has expired. Please login again.")
+            # Parent should handle re-login
+
+        except NetworkError as e:
+            self.status_label.setText(f"Network error: {str(e)}")
+            self.status_label.setStyleSheet("color: #e74c3c;")
+
+        except PicnicAPIError as e:
+            self.status_label.setText(f"API error: {str(e)}")
+            self.status_label.setStyleSheet("color: #e74c3c;")
+
+        except Exception as e:
+            self.status_label.setText(f"Unexpected error: {str(e)}")
+            self.status_label.setStyleSheet("color: #e74c3c;")
+
+        finally:
+            self.btn_refresh.setEnabled(True)
+
+    def on_group_selected(self, item):
+        """Display group details when a group is selected."""
+        group = item.data(Qt.UserRole)
+
+        if not group:
+            return
+
+        # Format group details for display
+        details = []
+        details.append(f"<h3>{group.get('name', 'Unknown Group')}</h3>")
+
+        # Add all available fields
+        for key, value in group.items():
+            if key == "name":
+                continue  # Already shown in title
+
+            # Format the key nicely
+            formatted_key = key.replace("_", " ").title()
+
+            if isinstance(value, (list, dict)):
+                details.append(f"<p><strong>{formatted_key}:</strong></p>")
+                details.append(f"<pre>{json.dumps(value, indent=2)}</pre>")
+            else:
+                details.append(f"<p><strong>{formatted_key}:</strong> {value}</p>")
+
+        self.details_text.setHtml("".join(details))
+
+
 # =============================
 # Main Window
 # =============================
@@ -835,10 +1007,11 @@ class DashboardPage(QWidget):
 class MainWindow(QMainWindow):
     """Main application window with integrated service management."""
 
-    def __init__(self):
+    def __init__(self, api_client):
         super().__init__()
         self.proc = None  # QProcess for broadcaster
         self.health_worker = None
+        self.api_client = api_client
 
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.setWindowIcon(self.style().standardIcon(QStyle.SP_ComputerIcon))
@@ -856,13 +1029,21 @@ class MainWindow(QMainWindow):
         # Sidebar
         side = QVBoxLayout()
         self.btn_dashboard = QPushButton("Dashboard")
+        self.btn_groups = QPushButton("Groups")
         self.btn_wifi = QPushButton("WiFi")
         self.btn_dashboard.setCheckable(True)
+        self.btn_groups.setCheckable(True)
         self.btn_dashboard.setChecked(True)
 
         side.addWidget(self.btn_dashboard)
+        side.addWidget(self.btn_groups)
         side.addWidget(self.btn_wifi)
         side.addStretch(1)
+
+        # Logout button at bottom
+        self.btn_logout = QPushButton("Logout")
+        self.btn_logout.setObjectName("logout")
+        side.addWidget(self.btn_logout)
 
         side_wrap = QWidget()
         side_wrap.setLayout(side)
@@ -877,13 +1058,15 @@ class MainWindow(QMainWindow):
         # Pages
         self.pages = QStackedWidget()
         self.page_dashboard = DashboardPage()
+        self.page_groups = GroupsPage(api_client)
 
         # Load frequency from env file
         freq_from_env = extract_current_frequency(ENV_PATH)
         if freq_from_env is not None and validate_frequency(freq_from_env):
             self.page_dashboard.freq_spin.setValue(freq_from_env)
 
-        self.pages.addWidget(self.page_dashboard)
+        self.pages.addWidget(self.page_dashboard)  # Index 0
+        self.pages.addWidget(self.page_groups)     # Index 1
 
         # Compose
         root.addWidget(side_wrap)
@@ -904,7 +1087,9 @@ class MainWindow(QMainWindow):
         # Connect signals
         self.page_dashboard.freq_set.connect(self.on_set_frequency)
         self.btn_dashboard.clicked.connect(lambda: self._goto(0))
+        self.btn_groups.clicked.connect(lambda: self._goto(1))
         self.btn_wifi.clicked.connect(self.open_wifi_dialog)
+        self.btn_logout.clicked.connect(self.handle_logout)
 
         # System tray
         self._setup_tray()
@@ -1163,6 +1348,33 @@ class MainWindow(QMainWindow):
         """Navigate to page by index."""
         self.pages.setCurrentIndex(index)
         self.btn_dashboard.setChecked(index == 0)
+        self.btn_groups.setChecked(index == 1)
+
+    def handle_logout(self):
+        """Handle user logout."""
+        reply = QMessageBox.question(
+            self,
+            "Logout",
+            "Are you sure you want to logout?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            # Clear the token
+            self.api_client.logout()
+
+            # Close main window
+            self.close()
+
+            # Show login dialog again
+            login = LoginDialog(self.api_client, self)
+            if login.exec_() == QDialog.Accepted:
+                # User logged in again, show main window
+                self.show()
+            else:
+                # User cancelled, exit application
+                QApplication.instance().quit()
 
     # ---------- System Tray ----------
 
@@ -1228,6 +1440,8 @@ class MainWindow(QMainWindow):
 
 def main():
     """Main application entry point."""
+    from api_client import PicnicAPIClient
+
     # High DPI support
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_SynthesizeMouseForUnhandledTouchEvents, True)
@@ -1242,14 +1456,19 @@ def main():
     app.setOrganizationName(APP_ORG)
     app.setApplicationName(APP_NAME)
 
-    # Show login dialog first
-    login = LoginDialog()
-    if login.exec_() != QDialog.Accepted:
-        # User cancelled or failed login
-        sys.exit(0)
+    # Create API client
+    api_client = PicnicAPIClient()
+
+    # Check if user has a valid token (auto-login)
+    if not api_client.is_authenticated():
+        # Show login dialog if no valid token
+        login = LoginDialog(api_client)
+        if login.exec_() != QDialog.Accepted:
+            # User cancelled or failed login
+            sys.exit(0)
 
     # User authenticated successfully, show main window
-    w = MainWindow()
+    w = MainWindow(api_client)
     w.show()
 
     sys.exit(app.exec_())
