@@ -98,7 +98,10 @@ class PicnicMessageBroadcaster:
 
             # Check if data contains a messages array
             if isinstance(messages, dict):
-                if "messages" in messages:
+                if "data" in messages:
+                    # Handle nested data structure: data.data[]
+                    messages = messages["data"]
+                elif "messages" in messages:
                     messages = messages["messages"]
                 elif "items" in messages:
                     messages = messages["items"]
