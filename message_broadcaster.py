@@ -83,21 +83,38 @@ class PicnicMessageBroadcaster:
 
         try:
             logger.info(f"Fetching messages for group {group_id} (page={page}, limit={limit})")
+            logger.debug(f"Request URL: {url}")
             response_data = self._make_request(url, headers=headers)
+
+            logger.debug(f"Response data: {json.dumps(response_data, indent=2)}")
 
             # Extract messages from response
             if "data" not in response_data:
-                logger.warning("No data in response")
-                return []
+                logger.warning(f"No 'data' field in response. Response keys: {response_data.keys()}")
+                logger.info(f"Full response: {response_data}")
+                raise MessageFetchError(f"Invalid API response format. Keys: {list(response_data.keys())}")
 
             messages = response_data["data"]
 
-            # Handle both single message and array of messages
+            # Check if data contains a messages array
             if isinstance(messages, dict):
-                messages = [messages]
-            elif not isinstance(messages, list):
-                logger.warning(f"Unexpected messages format: {type(messages)}")
-                return []
+                if "messages" in messages:
+                    messages = messages["messages"]
+                elif "items" in messages:
+                    messages = messages["items"]
+                else:
+                    # Single message object
+                    messages = [messages]
+
+            if not isinstance(messages, list):
+                logger.warning(f"Messages is not a list. Type: {type(messages)}, Value: {messages}")
+                raise MessageFetchError(f"Unexpected messages format: {type(messages).__name__}")
+
+            logger.info(f"Fetched {len(messages)} total messages")
+
+            # Log first message structure for debugging
+            if messages:
+                logger.debug(f"First message structure: {json.dumps(messages[0], indent=2)}")
 
             # Filter to only text messages (not system messages)
             text_messages = [
@@ -105,7 +122,7 @@ class PicnicMessageBroadcaster:
                 if msg.get("message_type") == "text" and not msg.get("is_system_message", False)
             ]
 
-            logger.info(f"Fetched {len(text_messages)} text messages from {len(messages)} total messages")
+            logger.info(f"Filtered to {len(text_messages)} text messages from {len(messages)} total messages")
             return text_messages
 
         except HTTPError as e:
@@ -121,8 +138,10 @@ class PicnicMessageBroadcaster:
         except URLError as e:
             logger.error(f"Network error fetching messages: {e.reason}")
             raise MessageFetchError(f"Cannot connect to server: {e.reason}")
+        except MessageFetchError:
+            raise
         except Exception as e:
-            logger.error(f"Unexpected error fetching messages: {e}")
+            logger.error(f"Unexpected error fetching messages: {e}", exc_info=True)
             raise MessageFetchError(f"Failed to fetch messages: {str(e)}")
 
     def format_message_for_display(self, message: Dict[str, Any]) -> Dict[str, str]:
