@@ -867,6 +867,14 @@ class GroupsPage(QWidget):
         title = QLabel("My Groups")
         title.setStyleSheet("font-size: 22px; font-weight: 600;")
 
+        # Instruction label
+        instruction_label = QLabel("📻 Click a group to view and broadcast messages")
+        instruction_label.setStyleSheet(
+            "font-size: 16px; padding: 12px; background-color: #e3f2fd; "
+            "color: #1976d2; border-radius: 6px; font-weight: 600;"
+        )
+        instruction_label.setAlignment(Qt.AlignCenter)
+
         # Refresh button
         refresh_layout = QHBoxLayout()
         self.btn_refresh = QPushButton("Refresh Groups")
@@ -881,6 +889,26 @@ class GroupsPage(QWidget):
 
         self.groups_list = QListWidget()
         self.groups_list.setMinimumHeight(300)
+        self.groups_list.setStyleSheet("""
+            QListWidget {
+                font-size: 16px;
+                border: 2px solid #ddd;
+                border-radius: 6px;
+            }
+            QListWidget::item {
+                padding: 15px;
+                border-bottom: 1px solid #eee;
+                min-height: 50px;
+            }
+            QListWidget::item:hover {
+                background-color: #e3f2fd;
+            }
+            QListWidget::item:selected {
+                background-color: #2196F3;
+                color: white;
+                font-weight: 600;
+            }
+        """)
         self.groups_list.itemClicked.connect(self.on_group_selected)
 
         groups_layout.addWidget(self.groups_list)
@@ -892,39 +920,13 @@ class GroupsPage(QWidget):
 
         self.details_text = QTextEdit()
         self.details_text.setReadOnly(True)
-        self.details_text.setPlaceholderText("Select a group to view details...")
+        self.details_text.setPlaceholderText("Click a group to view messages...")
         self.details_text.setMinimumHeight(200)
+        self.details_text.setVisible(False)  # Hide details text since we navigate directly
 
         details_layout.addWidget(self.details_text)
-
-        # View Messages button
-        self.btn_view_messages = QPushButton("📻 View & Broadcast Messages")
-        self.btn_view_messages.setMinimumHeight(60)
-        self.btn_view_messages.setStyleSheet("""
-            QPushButton {
-                font-size: 18px;
-                font-weight: 600;
-                background-color: #4CAF50;
-                color: white;
-                border-radius: 8px;
-                padding: 12px 24px;
-            }
-            QPushButton:hover {
-                background-color: #388E3C;
-            }
-            QPushButton:pressed {
-                background-color: #1B5E20;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-                color: #666666;
-            }
-        """)
-        self.btn_view_messages.setEnabled(False)
-        self.btn_view_messages.clicked.connect(self.view_group_messages)
-        details_layout.addWidget(self.btn_view_messages)
-
         details_group.setLayout(details_layout)
+        details_group.setVisible(False)  # Hide the entire details group
 
         # Status label
         self.status_label = QLabel("")
@@ -932,6 +934,7 @@ class GroupsPage(QWidget):
 
         # Compose
         lay.addWidget(title)
+        lay.addWidget(instruction_label)
         lay.addLayout(refresh_layout)
         lay.addWidget(groups_group, 1)
         lay.addWidget(details_group, 1)
@@ -1001,42 +1004,12 @@ class GroupsPage(QWidget):
             self.btn_refresh.setEnabled(True)
 
     def on_group_selected(self, item):
-        """Display group details when a group is selected."""
+        """Navigate directly to message list screen when a group is clicked."""
         group = item.data(Qt.UserRole)
 
         if not group:
             return
 
-        # Enable the View Messages button
-        self.btn_view_messages.setEnabled(True)
-
-        # Format group details for display
-        details = []
-        details.append(f"<h3>{group.get('name', 'Unknown Group')}</h3>")
-
-        # Add all available fields
-        for key, value in group.items():
-            if key == "name":
-                continue  # Already shown in title
-
-            # Format the key nicely
-            formatted_key = key.replace("_", " ").title()
-
-            if isinstance(value, (list, dict)):
-                details.append(f"<p><strong>{formatted_key}:</strong></p>")
-                details.append(f"<pre>{json.dumps(value, indent=2)}</pre>")
-            else:
-                details.append(f"<p><strong>{formatted_key}:</strong> {value}</p>")
-
-        self.details_text.setHtml("".join(details))
-
-    def view_group_messages(self):
-        """Navigate to message list screen for selected group."""
-        item = self.groups_list.currentItem()
-        if not item:
-            return
-
-        group = item.data(Qt.UserRole)
         group_id = group.get("id", "")
         group_name = group.get("name", "Unknown Group")
 
@@ -1055,6 +1028,12 @@ class GroupsPage(QWidget):
             # Set the group and navigate
             parent_window.page_messages.set_group(group_id, group_name, frequency)
             parent_window._goto(2)  # Navigate to messages page
+
+    def view_group_messages(self):
+        """Navigate to message list screen for selected group (button handler)."""
+        item = self.groups_list.currentItem()
+        if item:
+            self.on_group_selected(item)
 
 
 class MessageListScreen(QWidget):
