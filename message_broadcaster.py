@@ -45,7 +45,8 @@ class PicnicMessageBroadcaster:
         access_token: str,
         tts_endpoint: str = "",
         s3_bucket: str = "audio-txt-broadcast",
-        s3_prefix: str = "tts/"
+        s3_prefix: str = "tts/",
+        tts_api_key: str = ""
     ):
         """
         Initialize the message broadcaster.
@@ -55,13 +56,20 @@ class PicnicMessageBroadcaster:
             tts_endpoint: TTS API endpoint URL
             s3_bucket: S3 bucket for TTS audio storage
             s3_prefix: S3 prefix for TTS audio files
+            tts_api_key: API key for TTS API Gateway authentication
         """
         self._access_token = access_token
         self._tts_endpoint = tts_endpoint
         # Strip whitespace from S3 configuration
         self._s3_bucket = s3_bucket.strip() if s3_bucket else "audio-txt-broadcast"
         self._s3_prefix = s3_prefix.strip() if s3_prefix else "tts/"
-        logger.info(f"PicnicMessageBroadcaster initialized (bucket: {self._s3_bucket}, prefix: {self._s3_prefix})")
+        # Strip whitespace from API key
+        self._tts_api_key = tts_api_key.strip() if tts_api_key else ""
+
+        logger.info(f"PicnicMessageBroadcaster initialized")
+        logger.info(f"  - S3 Bucket: {self._s3_bucket}")
+        logger.info(f"  - S3 Prefix: {self._s3_prefix}")
+        logger.info(f"  - TTS API Key configured: {bool(self._tts_api_key)}")
 
     def get_group_messages(
         self,
@@ -240,10 +248,25 @@ class PicnicMessageBroadcaster:
             logger.info(f"Broadcasting message from {user_name} (frequency: {fm_frequency})")
             logger.debug(f"TTS payload: {payload}")
 
+            # Prepare headers with API key
+            tts_headers = {}
+            if self._tts_api_key:
+                tts_headers["x-api-key"] = self._tts_api_key
+                # Debug logging (masked)
+                masked_key = f"***{self._tts_api_key[-4:]}" if len(self._tts_api_key) >= 4 else "***"
+                logger.info(f"DEBUG: TTS API Key loaded: {bool(self._tts_api_key)}")
+                logger.info(f"DEBUG: TTS API Key length: {len(self._tts_api_key)} chars")
+                logger.info(f"DEBUG: Headers (masked): {{'Content-Type': 'application/json', 'x-api-key': '{masked_key}'}}")
+            else:
+                logger.warning("DEBUG: TTS_API_KEY not configured!")
+
+            logger.info(f"DEBUG: Making request to: {self._tts_endpoint}")
+
             response_data = self._make_request(
                 self._tts_endpoint,
                 method="POST",
-                data=payload
+                data=payload,
+                headers=tts_headers
             )
 
             logger.info("Message broadcast successful")
