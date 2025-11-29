@@ -269,7 +269,13 @@ class PicnicMessageBroadcaster:
                 headers=tts_headers
             )
 
+            # Log the full API response for debugging
+            logger.info(f"DEBUG: API Response: {json.dumps(response_data, indent=2)}")
             logger.info("Message broadcast successful")
+
+            # Also print to stdout for immediate visibility
+            print(f"DEBUG: TTS API Response: {json.dumps(response_data, indent=2)}")
+
             return response_data
 
         except HTTPError as e:
