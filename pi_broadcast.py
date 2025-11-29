@@ -5,6 +5,7 @@ import os, sys, json, time, urllib.parse, urllib.request, shlex, subprocess, pat
 import boto3
 from botocore.exceptions import ClientError
 from botocore.config import Config as BotoConfig
+import http.client
 
 # ===============================
 # Configuration (via environment)
@@ -31,6 +32,10 @@ DLQ_URL              = os.getenv("DLQ_URL", "")                        # optiona
 # Idle "silence" carrier
 SILENCE_FILE = os.getenv("SILENCE_FILE", "")
 SILENCE_SECS = int(os.getenv("SILENCE_SECS", "600"))
+
+# TTS API Configuration
+TTS_API_URL = os.getenv("TTS_API_URL", "")
+TTS_API_KEY = os.getenv("TTS_API_KEY", "")
 
 # Robust AWS client timeouts & retries
 _boto_cfg = BotoConfig(
@@ -179,6 +184,63 @@ def download_url(url: str, out_dir: str) -> str:
                 break
             f.write(chunk)
     return dest
+
+def call_tts_api(text: str, **kwargs) -> dict:
+    """
+    Call TTS API Gateway endpoint with x-api-key authentication.
+
+    Args:
+        text: Text to convert to speech
+        **kwargs: Additional parameters to send to the TTS API (voice, language, etc.)
+
+    Returns:
+        dict: JSON response from the TTS API
+
+    Raises:
+        ValueError: If TTS_API_URL or TTS_API_KEY is not configured
+        RuntimeError: If the API request fails
+    """
+    if not TTS_API_URL:
+        raise ValueError("TTS_API_URL not configured in environment")
+    if not TTS_API_KEY:
+        raise ValueError("TTS_API_KEY not configured in environment")
+
+    # Parse the API URL
+    parsed = urllib.parse.urlparse(TTS_API_URL)
+    host = parsed.netloc
+    path = parsed.path or "/"
+
+    # Build request payload
+    payload = {"text": text}
+    payload.update(kwargs)
+    body = json.dumps(payload).encode("utf-8")
+
+    # Build headers
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-key": TTS_API_KEY
+    }
+
+    log(f"Calling TTS API: {TTS_API_URL}")
+
+    try:
+        # Use HTTPS connection
+        conn = http.client.HTTPSConnection(host, timeout=60)
+        conn.request("POST", path, body=body, headers=headers)
+
+        response = conn.getresponse()
+        response_data = response.read().decode("utf-8")
+
+        if response.status != 200:
+            raise RuntimeError(f"TTS API returned status {response.status}: {response_data}")
+
+        return json.loads(response_data)
+
+    except Exception as e:
+        log(f"ERROR: TTS API call failed: {e}")
+        raise RuntimeError(f"TTS API call failed: {e}")
+    finally:
+        conn.close()
 
 # ===============================
 # Broadcast with timeout/heartbeat + interrupt
