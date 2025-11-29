@@ -218,10 +218,13 @@ def call_tts_api(text: str, **kwargs) -> dict:
     # Build headers
     headers = {
         "Content-Type": "application/json",
-        "x-api-key": TTS_API_KEY
+        "x-api-key": TTS_API_KEY.strip()  # Strip whitespace from API key
     }
 
     log(f"Calling TTS API: {TTS_API_URL}")
+    log(f"Request host: {host}, path: {path}")
+    log(f"API key length: {len(TTS_API_KEY.strip())} characters")
+    log(f"Request payload: {payload}")
 
     try:
         # Use HTTPS connection
@@ -231,11 +234,20 @@ def call_tts_api(text: str, **kwargs) -> dict:
         response = conn.getresponse()
         response_data = response.read().decode("utf-8")
 
+        log(f"Response status: {response.status}")
+        log(f"Response headers: {dict(response.getheaders())}")
+
         if response.status != 200:
+            log(f"ERROR: TTS API returned {response.status}")
+            log(f"Response body: {response_data}")
             raise RuntimeError(f"TTS API returned status {response.status}: {response_data}")
 
         return json.loads(response_data)
 
+    except json.JSONDecodeError as e:
+        log(f"ERROR: Invalid JSON response: {e}")
+        log(f"Raw response: {response_data}")
+        raise RuntimeError(f"Invalid JSON response from TTS API: {e}")
     except Exception as e:
         log(f"ERROR: TTS API call failed: {e}")
         raise RuntimeError(f"TTS API call failed: {e}")
