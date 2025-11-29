@@ -1230,12 +1230,16 @@ class MessageListScreen(QWidget):
         # Initialize broadcaster with current token
         if self.api_client and self.api_client._access_token:
             from message_broadcaster import PicnicMessageBroadcaster
-            # Get TTS endpoint from environment
+            # Get TTS configuration from environment
             env_vars = load_env_file(ENV_PATH)
             tts_endpoint = env_vars.get("TTS_ENDPOINT", os.getenv("TTS_ENDPOINT", ""))
+            s3_bucket = env_vars.get("TTS_S3_BUCKET", os.getenv("TTS_S3_BUCKET", "audio-txt-broadcast"))
+            s3_prefix = env_vars.get("TTS_S3_PREFIX", os.getenv("TTS_S3_PREFIX", "tts/"))
             self.broadcaster = PicnicMessageBroadcaster(
                 self.api_client._access_token,
-                tts_endpoint
+                tts_endpoint,
+                s3_bucket=s3_bucket,
+                s3_prefix=s3_prefix
             )
 
         # Auto-load messages

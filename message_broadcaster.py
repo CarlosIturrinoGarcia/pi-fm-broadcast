@@ -40,17 +40,28 @@ class PicnicMessageBroadcaster:
 
     PICNIC_BASE_URL = "http://34.221.11.241:3000/api/v1"
 
-    def __init__(self, access_token: str, tts_endpoint: str = ""):
+    def __init__(
+        self,
+        access_token: str,
+        tts_endpoint: str = "",
+        s3_bucket: str = "audio-txt-broadcast",
+        s3_prefix: str = "tts/"
+    ):
         """
         Initialize the message broadcaster.
 
         Args:
             access_token: Picnic API access token
             tts_endpoint: TTS API endpoint URL
+            s3_bucket: S3 bucket for TTS audio storage
+            s3_prefix: S3 prefix for TTS audio files
         """
         self._access_token = access_token
         self._tts_endpoint = tts_endpoint
-        logger.info("PicnicMessageBroadcaster initialized")
+        # Strip whitespace from S3 configuration
+        self._s3_bucket = s3_bucket.strip() if s3_bucket else "audio-txt-broadcast"
+        self._s3_prefix = s3_prefix.strip() if s3_prefix else "tts/"
+        logger.info(f"PicnicMessageBroadcaster initialized (bucket: {self._s3_bucket}, prefix: {self._s3_prefix})")
 
     def get_group_messages(
         self,
@@ -221,8 +232,8 @@ class PicnicMessageBroadcaster:
             "sample_rate": 16000,
             "engine": "neural",
             "language_code": language_code,
-            "s3_bucket": "audio-txt-broadcast",
-            "s3_prefix": "tts/"
+            "s3_bucket": self._s3_bucket,
+            "s3_prefix": self._s3_prefix
         }
 
         try:
