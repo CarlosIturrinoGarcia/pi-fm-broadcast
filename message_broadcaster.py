@@ -7,10 +7,14 @@ over FM radio using AWS Polly TTS service.
 
 import json
 import logging
+import os
+import subprocess
 from datetime import datetime
 from typing import Optional, Dict, List, Any
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
+import boto3
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
@@ -271,11 +275,75 @@ class PicnicMessageBroadcaster:
 
             # Log the full API response for debugging
             logger.info(f"DEBUG: API Response: {json.dumps(response_data, indent=2)}")
-            logger.info("Message broadcast successful")
-
-            # Also print to stdout for immediate visibility
             print(f"DEBUG: TTS API Response: {json.dumps(response_data, indent=2)}")
 
+            # Parse the response body (it's a JSON string inside the body field)
+            try:
+                if 'body' in response_data:
+                    body = json.loads(response_data['body'])
+                else:
+                    body = response_data
+
+                s3_key = body.get('key')
+                if not s3_key:
+                    raise TTSBroadcastError("No S3 key found in TTS API response")
+
+                logger.info(f"TTS audio created at S3 key: {s3_key}")
+                print(f"DEBUG: S3 key: {s3_key}")
+
+                # Download from S3
+                local_dir = "/home/rpibroadcaster/wav"
+                os.makedirs(local_dir, exist_ok=True)
+
+                local_file = os.path.join(local_dir, os.path.basename(s3_key))
+                logger.info(f"Downloading from S3: s3://{self._s3_bucket}/{s3_key} -> {local_file}")
+                print(f"DEBUG: Downloading to: {local_file}")
+
+                s3_client = boto3.client('s3', region_name='us-east-1')
+                s3_client.download_file(self._s3_bucket, s3_key, local_file)
+
+                logger.info(f"Successfully downloaded audio file: {local_file}")
+                print(f"DEBUG: Download complete: {local_file}")
+
+                # Broadcast on FM
+                if fm_frequency:
+                    broadcast_cmd = f'/usr/bin/sudo /usr/local/bin/pifm_broadcast.sh {local_file} -f {fm_frequency}'
+                    logger.info(f"Broadcasting on FM {fm_frequency} MHz: {broadcast_cmd}")
+                    print(f"DEBUG: Broadcasting: {broadcast_cmd}")
+
+                    result = subprocess.run(
+                        broadcast_cmd,
+                        shell=True,
+                        capture_output=True,
+                        text=True,
+                        timeout=300  # 5 minute timeout
+                    )
+
+                    if result.returncode == 0:
+                        logger.info("FM broadcast completed successfully")
+                        print("DEBUG: Broadcast complete!")
+                    else:
+                        logger.error(f"Broadcast command failed: {result.stderr}")
+                        print(f"DEBUG: Broadcast error: {result.stderr}")
+                        raise TTSBroadcastError(f"Broadcast command failed: {result.stderr}")
+                else:
+                    logger.warning("No FM frequency provided, skipping broadcast")
+                    print("DEBUG: No frequency provided, file downloaded but not broadcast")
+
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse TTS API response body: {e}")
+                raise TTSBroadcastError(f"Invalid response format: {e}")
+            except ClientError as e:
+                logger.error(f"S3 download failed: {e}")
+                raise TTSBroadcastError(f"Failed to download audio from S3: {e}")
+            except subprocess.TimeoutExpired:
+                logger.error("Broadcast command timed out")
+                raise TTSBroadcastError("Broadcast timed out after 5 minutes")
+            except Exception as e:
+                logger.error(f"Failed to download/broadcast audio: {e}")
+                raise TTSBroadcastError(f"Failed to complete broadcast: {e}")
+
+            logger.info("Message broadcast successful")
             return response_data
 
         except HTTPError as e:
