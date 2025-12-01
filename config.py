@@ -13,7 +13,9 @@ HOME_DIR = Path.home()
 SCRIPT_DIR = Path(__file__).parent.absolute()
 
 # Try to find the best path for env file
-if os.path.exists("/home/rpibroadcaster/broadcast.env"):
+if os.path.exists("/home/rpibroadcaster/broadcast_proj/broadcast.env"):
+    ENV_PATH = "/home/rpibroadcaster/broadcast_proj/broadcast.env"
+elif os.path.exists("/home/rpibroadcaster/broadcast.env"):
     ENV_PATH = "/home/rpibroadcaster/broadcast.env"
 elif os.path.exists(SCRIPT_DIR / "broadcast.env"):
     ENV_PATH = str(SCRIPT_DIR / "broadcast.env")
