@@ -1420,6 +1420,10 @@ class MessageListScreen(QWidget):
                 f"{success_count} message(s) broadcast successfully\n{error_count} message(s) failed"
             )
 
+        # Restart silence carrier after broadcast to prevent static
+        if success_count > 0:
+            self._restart_silence_carrier()
+
         # Re-enable buttons
         self.btn_broadcast.setEnabled(True)
         self.btn_refresh.setEnabled(True)
@@ -1428,6 +1432,38 @@ class MessageListScreen(QWidget):
         """Handle selection change in messages list."""
         has_selection = len(self.messages_list.selectedItems()) > 0
         self.btn_broadcast.setEnabled(has_selection)
+
+    def _restart_silence_carrier(self):
+        """Restart silence carrier after message broadcast."""
+        try:
+            # Get parent window (MainWindow)
+            parent_window = self.window()
+            if not hasattr(parent_window, '_start_silence_carrier'):
+                logger.warning("Parent window does not have _start_silence_carrier method")
+                return
+
+            # Get environment variables
+            env_vars = load_env_file(ENV_PATH)
+
+            # Create a simple log list for _start_silence_carrier
+            log_messages = []
+
+            class LogCapture:
+                def append(self, msg):
+                    log_messages.append(msg)
+                    logger.info(f"Silence carrier: {msg}")
+
+            log = LogCapture()
+
+            # Restart silence carrier on current frequency
+            logger.info(f"Restarting silence carrier on {self.current_frequency:.1f} MHz")
+            parent_window._start_silence_carrier(self.current_frequency, env_vars, log)
+
+            # Update status with success
+            self.status_label.setText(f"✓ Broadcast complete • Silence carrier restarted on {self.current_frequency:.1f} MHz")
+
+        except Exception as e:
+            logger.error(f"Failed to restart silence carrier: {e}")
 
     def go_back(self):
         """Navigate back to groups page."""
