@@ -1678,11 +1678,70 @@ class MainWindow(QMainWindow):
             log.append("Service not running, starting...")
             self._start_broadcaster_with_env(env_vars, fresh=True)
 
+        # Start silence carrier to prevent static
+        self._start_silence_carrier(freq, env_vars, log)
+
         QMessageBox.information(
             self,
             "Frequency Updated",
             f"Broadcasting frequency {'switched to' if immediate else 'will switch to'} {freq:.1f} MHz"
         )
+
+    def _start_silence_carrier(self, freq: float, env_vars: dict, log):
+        """Start broadcasting silence carrier to prevent static."""
+        import wave
+
+        # Ensure WAV directory exists
+        wav_dir = "/home/rpibroadcaster/wav"
+        if not os.path.exists(wav_dir):
+            os.makedirs(wav_dir, exist_ok=True)
+
+        # Create or verify silence WAV file
+        silence_file = os.path.join(wav_dir, "silence_carrier.wav")
+
+        try:
+            # Create silence WAV if it doesn't exist (1800 seconds = 30 minutes)
+            if not os.path.exists(silence_file):
+                log.append(f"Creating silence carrier file: {silence_file}")
+                with wave.open(silence_file, "wb") as wav:
+                    wav.setnchannels(1)  # Mono
+                    wav.setsampwidth(2)  # 16-bit
+                    wav.setframerate(16000)  # 16kHz
+
+                    # Write 30 minutes of silence (all zeros)
+                    silence_secs = 1800
+                    silence_data = b"\x00\x00" * 16000 * silence_secs
+                    wav.writeframes(silence_data)
+
+                log.append("Silence carrier file created successfully")
+
+            # Build broadcast command for silence
+            broadcast_cmd = env_vars.get(
+                "BROADCAST_CMD",
+                f"/usr/bin/sudo /usr/local/bin/pifm_broadcast.sh {silence_file} -f {freq}"
+            )
+
+            # Replace {file} and {freq} placeholders
+            broadcast_cmd = broadcast_cmd.replace("{file}", silence_file)
+            broadcast_cmd = broadcast_cmd.replace("{freq}", str(freq))
+
+            log.append(f"Starting silence carrier on {freq:.1f} MHz...")
+            log.append(f"Command: {broadcast_cmd}")
+
+            # Start silence carrier in background
+            subprocess.Popen(
+                broadcast_cmd,
+                shell=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL
+            )
+
+            log.append("Silence carrier started successfully")
+
+        except Exception as e:
+            log.append(f"Warning: Could not start silence carrier: {e}")
+            logger.warning(f"Failed to start silence carrier: {e}")
 
     def _start_broadcaster_with_env(self, env_vars: dict, fresh: bool = False):
         """Start the broadcaster service with given environment."""
