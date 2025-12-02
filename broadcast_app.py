@@ -1073,9 +1073,62 @@ class GroupsPage(QWidget):
 
             logger.info(f"Selected group '{group_name}' with frequency {frequency:.1f} MHz")
 
+            # Start silence carrier on the group's frequency immediately
+            self._start_group_silence_carrier(frequency, parent_window)
+
             # Set the group and navigate
             parent_window.page_messages.set_group(group_id, group_name, frequency)
             parent_window._goto(2)  # Navigate to messages page
+
+    def _start_group_silence_carrier(self, frequency: float, parent_window):
+        """Start silence carrier when a group is selected."""
+        try:
+            if not hasattr(parent_window, '_start_silence_carrier'):
+                logger.warning("Parent window does not have _start_silence_carrier method")
+                return
+
+            # Stop any existing pifm processes first
+            logger.info("Stopping any existing pifm processes...")
+            subprocess.run(
+                ["sudo", "pkill", "-9", "pifm"],
+                capture_output=True,
+                timeout=5
+            )
+            subprocess.run(
+                ["sudo", "pkill", "-9", "pifm_broadcast"],
+                capture_output=True,
+                timeout=5
+            )
+
+            # Brief delay to ensure /dev/mem is released
+            import time
+            time.sleep(0.5)
+
+            # Get environment variables
+            env_vars = load_env_file(ENV_PATH)
+
+            # Create a simple log list
+            log_messages = []
+
+            class LogCapture:
+                def append(self, msg):
+                    log_messages.append(msg)
+                    logger.info(f"Group silence carrier: {msg}")
+
+            log = LogCapture()
+
+            # Start silence carrier on group's frequency
+            logger.info(f"Starting silence carrier for group on {frequency:.1f} MHz")
+            parent_window._start_silence_carrier(frequency, env_vars, log)
+
+            # Update status
+            self.status_label.setText(f"✓ Broadcasting silence carrier on {frequency:.1f} MHz")
+            self.status_label.setStyleSheet("color: #2ecc94;")
+
+        except Exception as e:
+            logger.error(f"Failed to start group silence carrier: {e}")
+            self.status_label.setText(f"Warning: Could not start silence carrier - {e}")
+            self.status_label.setStyleSheet("color: #ff9800;")
 
     def view_group_messages(self):
         """Navigate to message list screen for selected group (button handler)."""
