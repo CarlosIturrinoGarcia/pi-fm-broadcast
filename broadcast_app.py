@@ -1739,19 +1739,35 @@ class MainWindow(QMainWindow):
 
         if running:
             pid = int(self.proc.processId())
-            try:
-                if immediate:
-                    os.kill(pid, signal.SIGUSR2)
-                    log.append(f"Sent SIGUSR2 to PID {pid} (immediate switch)")
-                else:
-                    os.kill(pid, signal.SIGHUP)
-                    log.append(f"Sent SIGHUP to PID {pid} (reload after current message)")
-            except ProcessLookupError:
-                log.append(f"Process {pid} not found, restarting service...")
+
+            # CRITICAL: Validate PID before sending signals
+            if pid <= 0:
+                log.append(f"WARNING: Invalid PID {pid}, cannot signal process")
+                logger.error(f"Invalid process ID: {pid}")
                 self._start_broadcaster_with_env(env_vars, fresh=True)
-            except Exception as e:
-                log.append(f"Failed to signal process: {e}")
-                self._start_broadcaster_with_env(env_vars, fresh=True)
+            else:
+                try:
+                    if immediate:
+                        os.kill(pid, signal.SIGUSR2)
+                        log.append(f"Sent SIGUSR2 to PID {pid} (immediate switch)")
+                    else:
+                        os.kill(pid, signal.SIGHUP)
+                        log.append(f"Sent SIGHUP to PID {pid} (reload after current message)")
+                except ProcessLookupError:
+                    log.append(f"Process {pid} not found, restarting service...")
+                    self._start_broadcaster_with_env(env_vars, fresh=True)
+                except PermissionError as e:
+                    log.append(f"Permission denied signaling process {pid}: {e}")
+                    logger.error(f"Permission error sending signal to PID {pid}: {e}")
+                    QMessageBox.critical(self, "Permission Error", f"Cannot signal process (need sudo?): {e}")
+                except OSError as e:
+                    log.append(f"OS error signaling process {pid}: {e}")
+                    logger.error(f"OS error sending signal to PID {pid}: {e}")
+                    self._start_broadcaster_with_env(env_vars, fresh=True)
+                except Exception as e:
+                    log.append(f"Failed to signal process: {e}")
+                    logger.error(f"Unexpected error signaling PID {pid}: {e}")
+                    self._start_broadcaster_with_env(env_vars, fresh=True)
         else:
             log.append("Service not running, starting...")
             self._start_broadcaster_with_env(env_vars, fresh=True)
@@ -1793,23 +1809,38 @@ class MainWindow(QMainWindow):
 
                 log.append("Silence carrier file created successfully")
 
+            # Validate frequency
+            if not isinstance(freq, (int, float)) or freq < 76.0 or freq > 108.0:
+                raise ValueError(f"Invalid FM frequency: {freq} (must be 76.0-108.0 MHz)")
+
             # Build broadcast command for silence
             broadcast_cmd_template = env_vars.get(
                 "BROADCAST_CMD",
                 "/usr/bin/sudo /usr/local/bin/pifm_broadcast.sh {file} -f {freq}"
             )
 
-            # Replace {file} and {freq} placeholders
-            broadcast_cmd = broadcast_cmd_template.replace("{file}", silence_file)
-            broadcast_cmd = broadcast_cmd.replace("{freq}", str(freq))
+            # Parse command safely without shell=True
+            cmd_parts = broadcast_cmd_template.split()
+            cmd_args = []
+            for part in cmd_parts:
+                if '{file}' in part:
+                    # Verify silence file exists
+                    if not os.path.exists(silence_file):
+                        raise FileNotFoundError(f"Silence file not found: {silence_file}")
+                    cmd_args.append(part.replace('{file}', silence_file))
+                elif '{freq}' in part:
+                    cmd_args.append(part.replace('{freq}', f"{freq:.1f}"))
+                else:
+                    cmd_args.append(part)
 
             log.append(f"Starting silence carrier on {freq:.1f} MHz...")
-            log.append(f"Command: {broadcast_cmd}")
+            log.append(f"Command: {' '.join(cmd_args)}")
 
-            # Start silence carrier in background
+            # Start silence carrier in background without shell=True
+            # Note: We don't track this process intentionally - it should run until killed
             subprocess.Popen(
-                broadcast_cmd,
-                shell=True,
+                cmd_args,
+                shell=False,  # CRITICAL: Prevent command injection
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 stdin=subprocess.DEVNULL

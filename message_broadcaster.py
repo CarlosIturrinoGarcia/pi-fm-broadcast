@@ -295,7 +295,22 @@ class PicnicMessageBroadcaster:
                 local_dir = "/home/rpibroadcaster/wav"
                 os.makedirs(local_dir, exist_ok=True)
 
-                local_file = os.path.join(local_dir, os.path.basename(s3_key))
+                # Sanitize filename to prevent path traversal
+                filename = os.path.basename(s3_key)
+                if not filename or filename.startswith('.') or '/' in filename or '\\' in filename:
+                    # Generate safe filename from S3 key hash if invalid
+                    import hashlib
+                    filename = hashlib.md5(s3_key.encode()).hexdigest() + '.wav'
+                    logger.warning(f"S3 key had invalid filename, using safe name: {filename}")
+
+                local_file = os.path.join(local_dir, filename)
+
+                # Verify local_file is actually inside local_dir (prevent path traversal)
+                local_file_abs = os.path.abspath(local_file)
+                local_dir_abs = os.path.abspath(local_dir)
+                if not local_file_abs.startswith(local_dir_abs + os.sep):
+                    raise TTSBroadcastError(f"Invalid S3 key results in path traversal: {s3_key}")
+
                 logger.info(f"Downloading from S3: s3://{self._s3_bucket}/{s3_key} -> {local_file}")
                 print(f"DEBUG: Downloading to: {local_file}")
 
@@ -307,19 +322,37 @@ class PicnicMessageBroadcaster:
 
                 # Broadcast on FM
                 if fm_frequency:
+                    # Validate frequency
+                    if not isinstance(fm_frequency, (int, float)) or fm_frequency < 76.0 or fm_frequency > 108.0:
+                        raise TTSBroadcastError(f"Invalid FM frequency: {fm_frequency} (must be 76.0-108.0 MHz)")
+
                     # Get BROADCAST_CMD from environment
                     broadcast_cmd_template = os.getenv('BROADCAST_CMD', '/usr/bin/sudo /usr/local/bin/pifm_broadcast.sh {file} -f {freq}')
 
-                    # Replace placeholders
-                    broadcast_cmd = broadcast_cmd_template.replace('{file}', local_file)
-                    broadcast_cmd = broadcast_cmd.replace('{freq}', str(fm_frequency))
+                    # Build command safely without shell=True to prevent injection
+                    # Parse the template into command parts
+                    cmd_parts = broadcast_cmd_template.split()
 
-                    logger.info(f"Broadcasting on FM {fm_frequency} MHz: {broadcast_cmd}")
-                    print(f"DEBUG: Broadcasting: {broadcast_cmd}")
+                    # Replace placeholders in command arguments
+                    cmd_args = []
+                    for part in cmd_parts:
+                        if '{file}' in part:
+                            # Verify file exists before using it
+                            if not os.path.exists(local_file):
+                                raise TTSBroadcastError(f"Audio file not found: {local_file}")
+                            cmd_args.append(part.replace('{file}', local_file))
+                        elif '{freq}' in part:
+                            cmd_args.append(part.replace('{freq}', f"{fm_frequency:.1f}"))
+                        else:
+                            cmd_args.append(part)
 
+                    logger.info(f"Broadcasting on FM {fm_frequency} MHz: {' '.join(cmd_args)}")
+                    print(f"DEBUG: Broadcasting: {' '.join(cmd_args)}")
+
+                    # Execute without shell=True to prevent command injection
                     result = subprocess.run(
-                        broadcast_cmd,
-                        shell=True,
+                        cmd_args,
+                        shell=False,  # CRITICAL: No shell interpretation
                         capture_output=True,
                         text=True,
                         timeout=300  # 5 minute timeout
