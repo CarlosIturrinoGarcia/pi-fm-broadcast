@@ -985,7 +985,21 @@ class GroupsPage(QWidget):
             for group in groups:
                 # Display group name or ID
                 group_name = group.get("name", group.get("id", "Unknown Group"))
-                item = QListWidgetItem(group_name)
+
+                # Get frequency from group data
+                frequency = group.get("radio_frequency")
+
+                # Format display text with frequency if available
+                if frequency:
+                    try:
+                        freq_float = float(frequency)
+                        display_text = f"{group_name}  •  {freq_float:.1f} MHz"
+                    except (ValueError, TypeError):
+                        display_text = f"{group_name}  •  {frequency} MHz"
+                else:
+                    display_text = f"{group_name}  •  No frequency"
+
+                item = QListWidgetItem(display_text)
                 item.setData(Qt.UserRole, group)  # Store full group data
                 self.groups_list.addItem(item)
 
