@@ -1754,7 +1754,7 @@ class MainWindow(QMainWindow):
             # Build broadcast command for silence
             broadcast_cmd = env_vars.get(
                 "BROADCAST_CMD",
-                f"/usr/bin/sudo /usr/local/bin/pifm_broadcast.sh {silence_file} -f {freq}"
+                f"/usr/bin/sudo /usr/local/bin/pifm {silence_file} {freq} 16000"
             )
 
             # Replace {file} and {freq} placeholders
