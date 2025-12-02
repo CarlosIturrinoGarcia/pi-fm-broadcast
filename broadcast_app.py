@@ -990,8 +990,27 @@ class GroupsPage(QWidget):
                 logger.info(f"DEBUG: Group '{group_name}' fields: {list(group.keys())}")
                 logger.info(f"DEBUG: Full group data: {json.dumps(group, indent=2)}")
 
-                # Get frequency from group data
-                frequency = group.get("radio_frequency")
+                # Get frequency from group data - try multiple field names
+                frequency = None
+                possible_fields = ['radio_frequency', 'radioFrequency', 'frequency', 'fm_frequency', 'fmFrequency', 'broadcast_frequency', 'broadcastFrequency']
+
+                for field in possible_fields:
+                    if field in group and group[field] is not None:
+                        frequency = group[field]
+                        logger.info(f"DEBUG: Found frequency for '{group_name}' in field '{field}': {frequency}")
+                        break
+
+                # Check nested fields
+                if frequency is None:
+                    for nested in ['settings', 'config', 'broadcast_settings', 'broadcastSettings']:
+                        if nested in group and isinstance(group[nested], dict):
+                            for field in possible_fields:
+                                if field in group[nested] and group[nested][field] is not None:
+                                    frequency = group[nested][field]
+                                    logger.info(f"DEBUG: Found frequency for '{group_name}' in nested field '{nested}.{field}': {frequency}")
+                                    break
+                            if frequency is not None:
+                                break
 
                 # Format display text with frequency if available
                 if frequency:
@@ -1068,10 +1087,42 @@ class GroupsPage(QWidget):
             logger.info(f"DEBUG: Selected group fields: {list(group.keys())}")
             logger.info(f"DEBUG: Selected group data: {json.dumps(group, indent=2)}")
 
-            # Get frequency from group's radio_frequency field
-            frequency = group.get('radio_frequency', 90.8)
+            # Try multiple possible field names for frequency
+            frequency = None
+            possible_fields = [
+                'radio_frequency',
+                'radioFrequency',
+                'frequency',
+                'fm_frequency',
+                'fmFrequency',
+                'broadcast_frequency',
+                'broadcastFrequency'
+            ]
 
-            logger.info(f"DEBUG: Raw frequency value from group.get('radio_frequency'): {frequency} (type: {type(frequency).__name__})")
+            for field in possible_fields:
+                if field in group and group[field] is not None:
+                    frequency = group[field]
+                    logger.info(f"DEBUG: Found frequency in field '{field}': {frequency}")
+                    break
+
+            # Check nested fields
+            if frequency is None:
+                for nested in ['settings', 'config', 'broadcast_settings', 'broadcastSettings']:
+                    if nested in group and isinstance(group[nested], dict):
+                        for field in possible_fields:
+                            if field in group[nested] and group[nested][field] is not None:
+                                frequency = group[nested][field]
+                                logger.info(f"DEBUG: Found frequency in nested field '{nested}.{field}': {frequency}")
+                                break
+                        if frequency is not None:
+                            break
+
+            # Default to 90.8 if not found
+            if frequency is None:
+                frequency = 90.8
+                logger.warning(f"DEBUG: No frequency field found in group data, using default 90.8")
+
+            logger.info(f"DEBUG: Raw frequency value: {frequency} (type: {type(frequency).__name__})")
 
             # Convert to float if it's a string
             if isinstance(frequency, str):
