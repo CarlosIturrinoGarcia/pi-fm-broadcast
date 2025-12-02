@@ -1107,6 +1107,20 @@ class GroupsPage(QWidget):
             # Get environment variables
             env_vars = load_env_file(ENV_PATH)
 
+            # Update BROADCAST_CMD with the group's frequency
+            broadcast_cmd_template = env_vars.get(
+                "BROADCAST_CMD",
+                "/usr/bin/sudo /usr/local/bin/pifm_broadcast.sh {file} -f {freq}"
+            )
+            new_broadcast_cmd = render_broadcast_cmd(broadcast_cmd_template, frequency)
+
+            # Write the updated BROADCAST_CMD to the env file
+            write_env_key(ENV_PATH, "BROADCAST_CMD", new_broadcast_cmd)
+            logger.info(f"Updated BROADCAST_CMD to frequency {frequency:.1f} MHz: {new_broadcast_cmd}")
+
+            # Update env_vars dict for immediate use
+            env_vars["BROADCAST_CMD"] = new_broadcast_cmd
+
             # Create a simple log list
             log_messages = []
 
