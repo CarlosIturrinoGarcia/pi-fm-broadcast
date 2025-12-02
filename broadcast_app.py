@@ -1370,6 +1370,10 @@ class MessageListScreen(QWidget):
         if reply != QMessageBox.Yes:
             return
 
+        # Stop silence carrier BEFORE broadcasting to free /dev/mem
+        logger.info("Stopping silence carrier before message broadcast...")
+        self._stop_all_pifm_processes()
+
         # Disable buttons during broadcast
         self.btn_broadcast.setEnabled(False)
         self.btn_refresh.setEnabled(False)
@@ -1445,6 +1449,29 @@ class MessageListScreen(QWidget):
         has_selection = len(self.messages_list.selectedItems()) > 0
         self.btn_broadcast.setEnabled(has_selection)
 
+    def _stop_all_pifm_processes(self):
+        """Stop all running pifm/pifm_broadcast processes to free /dev/mem."""
+        try:
+            logger.info("Stopping all pifm processes to free /dev/mem...")
+            # Kill all pifm processes
+            subprocess.run(
+                ["sudo", "pkill", "-9", "pifm"],
+                capture_output=True,
+                timeout=5
+            )
+            # Also kill any pifm_broadcast.sh processes
+            subprocess.run(
+                ["sudo", "pkill", "-9", "pifm_broadcast"],
+                capture_output=True,
+                timeout=5
+            )
+            # Brief delay to ensure /dev/mem is released
+            import time
+            time.sleep(0.5)
+            logger.info("All pifm processes stopped")
+        except Exception as e:
+            logger.warning(f"Failed to stop pifm processes: {e}")
+
     def _restart_silence_carrier(self):
         """Restart silence carrier after message broadcast."""
         try:
@@ -1453,6 +1480,9 @@ class MessageListScreen(QWidget):
             if not hasattr(parent_window, '_start_silence_carrier'):
                 logger.warning("Parent window does not have _start_silence_carrier method")
                 return
+
+            # Stop any existing pifm processes first
+            self._stop_all_pifm_processes()
 
             # Get environment variables
             env_vars = load_env_file(ENV_PATH)
