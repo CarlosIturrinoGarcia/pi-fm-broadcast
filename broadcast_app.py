@@ -986,6 +986,10 @@ class GroupsPage(QWidget):
                 # Display group name or ID
                 group_name = group.get("name", group.get("id", "Unknown Group"))
 
+                # DEBUG: Log all group fields to see what we're getting
+                logger.info(f"DEBUG: Group '{group_name}' fields: {list(group.keys())}")
+                logger.info(f"DEBUG: Full group data: {json.dumps(group, indent=2)}")
+
                 # Get frequency from group data
                 frequency = group.get("radio_frequency")
 
@@ -1060,13 +1064,20 @@ class GroupsPage(QWidget):
         # Get parent window and switch to messages page
         parent_window = self.window()
         if hasattr(parent_window, 'page_messages') and hasattr(parent_window, '_goto'):
+            # DEBUG: Log all group fields when selecting
+            logger.info(f"DEBUG: Selected group fields: {list(group.keys())}")
+            logger.info(f"DEBUG: Selected group data: {json.dumps(group, indent=2)}")
+
             # Get frequency from group's radio_frequency field
             frequency = group.get('radio_frequency', 90.8)
+
+            logger.info(f"DEBUG: Raw frequency value from group.get('radio_frequency'): {frequency} (type: {type(frequency).__name__})")
 
             # Convert to float if it's a string
             if isinstance(frequency, str):
                 try:
                     frequency = float(frequency)
+                    logger.info(f"DEBUG: Converted string to float: {frequency}")
                 except ValueError:
                     logger.warning(f"Invalid radio_frequency '{frequency}' for group {group_name}, defaulting to 90.8")
                     frequency = 90.8
