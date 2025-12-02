@@ -1046,10 +1046,18 @@ class GroupsPage(QWidget):
         # Get parent window and switch to messages page
         parent_window = self.window()
         if hasattr(parent_window, 'page_messages') and hasattr(parent_window, '_goto'):
-            # Get current frequency from dashboard
-            frequency = 90.8
-            if hasattr(parent_window, 'page_dashboard'):
-                frequency = parent_window.page_dashboard.freq_spin.value()
+            # Get frequency from group's radio_frequency field
+            frequency = group.get('radio_frequency', 90.8)
+
+            # Convert to float if it's a string
+            if isinstance(frequency, str):
+                try:
+                    frequency = float(frequency)
+                except ValueError:
+                    logger.warning(f"Invalid radio_frequency '{frequency}' for group {group_name}, defaulting to 90.8")
+                    frequency = 90.8
+
+            logger.info(f"Selected group '{group_name}' with frequency {frequency:.1f} MHz")
 
             # Set the group and navigate
             parent_window.page_messages.set_group(group_id, group_name, frequency)
@@ -1243,6 +1251,10 @@ class MessageListScreen(QWidget):
                 s3_prefix=s3_prefix,
                 tts_api_key=tts_api_key
             )
+
+        # Start silence carrier on the group's frequency
+        logger.info(f"Starting silence carrier for group '{group_name}' on {frequency:.1f} MHz")
+        self._restart_silence_carrier()
 
         # Auto-load messages
         self.refresh_messages()
