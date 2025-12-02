@@ -321,7 +321,7 @@ class PicnicMessageBroadcaster:
                 print(f"DEBUG: Download complete: {local_file}")
 
                 # Broadcast on FM
-                if fm_frequency:
+                if fm_frequency is not None:
                     # Validate frequency
                     if not isinstance(fm_frequency, (int, float)) or fm_frequency < 76.0 or fm_frequency > 108.0:
                         raise TTSBroadcastError(f"Invalid FM frequency: {fm_frequency} (must be 76.0-108.0 MHz)")
