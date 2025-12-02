@@ -1752,13 +1752,13 @@ class MainWindow(QMainWindow):
                 log.append("Silence carrier file created successfully")
 
             # Build broadcast command for silence
-            broadcast_cmd = env_vars.get(
+            broadcast_cmd_template = env_vars.get(
                 "BROADCAST_CMD",
-                f"/usr/bin/sudo /usr/local/bin/pifm {silence_file} {freq} 16000"
+                "/usr/bin/sudo /usr/local/bin/pifm_broadcast.sh {file} -f {freq}"
             )
 
             # Replace {file} and {freq} placeholders
-            broadcast_cmd = broadcast_cmd.replace("{file}", silence_file)
+            broadcast_cmd = broadcast_cmd_template.replace("{file}", silence_file)
             broadcast_cmd = broadcast_cmd.replace("{freq}", str(freq))
 
             log.append(f"Starting silence carrier on {freq:.1f} MHz...")

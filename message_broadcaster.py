@@ -307,7 +307,13 @@ class PicnicMessageBroadcaster:
 
                 # Broadcast on FM
                 if fm_frequency:
-                    broadcast_cmd = f'/usr/bin/sudo /usr/local/bin/pifm {local_file} {fm_frequency} 16000'
+                    # Get BROADCAST_CMD from environment
+                    broadcast_cmd_template = os.getenv('BROADCAST_CMD', '/usr/bin/sudo /usr/local/bin/pifm_broadcast.sh {file} -f {freq}')
+
+                    # Replace placeholders
+                    broadcast_cmd = broadcast_cmd_template.replace('{file}', local_file)
+                    broadcast_cmd = broadcast_cmd.replace('{freq}', str(fm_frequency))
+
                     logger.info(f"Broadcasting on FM {fm_frequency} MHz: {broadcast_cmd}")
                     print(f"DEBUG: Broadcasting: {broadcast_cmd}")
 
