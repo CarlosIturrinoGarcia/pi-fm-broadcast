@@ -228,10 +228,19 @@ class PicnicAPIClient:
             )
 
             # Extract group from response
+            # The detail endpoint returns: {"data": {"group": {...}}}
             if "data" in response_data:
-                group = response_data["data"]
-                logger.info(f"Successfully fetched details for group {group_id}")
-                return group
+                data = response_data["data"]
+
+                # Check if group is nested inside data
+                if "group" in data and isinstance(data["group"], dict):
+                    group = data["group"]
+                    logger.info(f"Successfully fetched details for group {group_id}")
+                    return group
+                else:
+                    # Fallback: return data directly if no nested group
+                    logger.info(f"Successfully fetched details for group {group_id} (no nested group object)")
+                    return data
 
             logger.warning("No group data in response")
             return None
