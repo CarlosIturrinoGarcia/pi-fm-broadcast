@@ -194,9 +194,72 @@ class PicnicAPIClient:
         """
         return self._user_data
 
+    def get_group_detail(self, group_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Fetch full group details by ID including all fields.
+
+        This endpoint returns complete group data including radio_frequency
+        which may not be available in the get-my-groups endpoint.
+
+        Args:
+            group_id: The group's _id
+
+        Returns:
+            Full group data dictionary or None if not found
+
+        Raises:
+            TokenExpiredError: If the access token has expired
+            NetworkError: If network communication fails
+            PicnicAPIError: For other API errors
+        """
+        if not self._access_token:
+            # Try to load token from file
+            if not self._load_token():
+                raise TokenExpiredError("No valid access token. Please login first.")
+
+        url = f"{self.BASE_URL}/group/detail/{group_id}"
+
+        try:
+            logger.info(f"Fetching full details for group {group_id}")
+            response_data = self._make_request(
+                url,
+                method="GET",
+                headers={"Authorization": f"Bearer {self._access_token}"}
+            )
+
+            # Extract group from response
+            if "data" in response_data:
+                group = response_data["data"]
+                logger.info(f"Successfully fetched details for group {group_id}")
+                return group
+
+            logger.warning("No group data in response")
+            return None
+
+        except HTTPError as e:
+            if e.code == 401:
+                logger.warning("Access token expired or invalid")
+                self._clear_token()
+                raise TokenExpiredError("Session expired. Please login again.")
+            elif e.code == 404:
+                logger.warning(f"Group {group_id} not found")
+                return None
+            else:
+                logger.error(f"HTTP error fetching group details: {e.code} - {e.reason}")
+                raise NetworkError(f"Server error: {e.code} - {e.reason}")
+        except URLError as e:
+            logger.error(f"Network error fetching group details: {e.reason}")
+            raise NetworkError(f"Cannot connect to server: {e.reason}")
+        except Exception as e:
+            logger.error(f"Unexpected error fetching group details: {e}")
+            raise PicnicAPIError(f"Failed to fetch group details: {str(e)}")
+
     def get_group_by_id(self, group_id: str) -> Optional[Dict[str, Any]]:
         """
-        Fetch a specific group by ID.
+        Fetch a specific group by ID with full details.
+
+        This method uses the group detail endpoint to get complete data
+        including radio_frequency and other fields.
 
         Args:
             group_id: The group's _id
@@ -209,18 +272,7 @@ class PicnicAPIClient:
             NetworkError: If network communication fails
             PicnicAPIError: For other API errors
         """
-        # Fetch all groups and find the matching one
-        groups = self.get_my_groups()
-
-        for group in groups:
-            # Try different possible ID field names
-            gid = group.get("id") or group.get("_id") or group.get("group_id") or group.get("event_id")
-            if gid == group_id:
-                logger.info(f"Found group {group_id}")
-                return group
-
-        logger.warning(f"Group {group_id} not found")
-        return None
+        return self.get_group_detail(group_id)
 
     def _make_request(
         self,
