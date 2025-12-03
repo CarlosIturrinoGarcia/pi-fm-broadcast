@@ -2193,6 +2193,27 @@ class MainWindow(QMainWindow):
 # Application Entry Point
 # =============================
 
+def update_sailing_group_frequency(api_client):
+    """
+    Update the Sailing group's radio frequency on startup.
+
+    This ensures the group has the correct radio_frequency field set.
+    """
+    SAILING_GROUP_ID = "6918ed90a92aa58974af4ed1"
+    FREQUENCY = "90.8"
+
+    try:
+        logger.info(f"Updating Sailing group frequency to {FREQUENCY} MHz...")
+        result = api_client.update_group(
+            SAILING_GROUP_ID,
+            {"radio_frequency": FREQUENCY}
+        )
+        logger.info(f"Successfully updated Sailing group frequency: {result}")
+    except Exception as e:
+        logger.warning(f"Failed to update Sailing group frequency: {e}")
+        # Don't fail startup if this fails - it's not critical
+
+
 def main():
     """Main application entry point."""
     from api_client import PicnicAPIClient
@@ -2221,6 +2242,9 @@ def main():
         if login.exec_() != QDialog.Accepted:
             # User cancelled or failed login
             sys.exit(0)
+
+    # Update Sailing group frequency after successful authentication
+    update_sailing_group_frequency(api_client)
 
     # User authenticated successfully, show main window
     w = MainWindow(api_client)

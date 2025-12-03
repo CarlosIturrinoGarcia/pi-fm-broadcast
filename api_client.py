@@ -194,6 +194,59 @@ class PicnicAPIClient:
         """
         return self._user_data
 
+    def update_group(self, group_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Update a group's properties.
+
+        Args:
+            group_id: The group's _id
+            updates: Dictionary of fields to update (e.g., {"radio_frequency": "90.8"})
+
+        Returns:
+            Updated group data
+
+        Raises:
+            TokenExpiredError: If the access token has expired
+            NetworkError: If network communication fails
+            PicnicAPIError: For other API errors
+        """
+        if not self._access_token:
+            # Try to load token from file
+            if not self._load_token():
+                raise TokenExpiredError("No valid access token. Please login first.")
+
+        url = f"{self.BASE_URL}/group/update"
+
+        # Merge group_id with updates
+        payload = {"_id": group_id, **updates}
+
+        try:
+            logger.info(f"Updating group {group_id} with: {updates}")
+            response_data = self._make_request(
+                url,
+                method="POST",
+                data=payload,
+                headers={"Authorization": f"Bearer {self._access_token}"}
+            )
+
+            logger.info(f"Group updated successfully: {response_data}")
+            return response_data
+
+        except HTTPError as e:
+            if e.code == 401:
+                logger.warning("Access token expired or invalid")
+                self._clear_token()
+                raise TokenExpiredError("Session expired. Please login again.")
+            else:
+                logger.error(f"HTTP error updating group: {e.code} - {e.reason}")
+                raise NetworkError(f"Server error: {e.code} - {e.reason}")
+        except URLError as e:
+            logger.error(f"Network error updating group: {e.reason}")
+            raise NetworkError(f"Cannot connect to server: {e.reason}")
+        except Exception as e:
+            logger.error(f"Unexpected error updating group: {e}")
+            raise PicnicAPIError(f"Failed to update group: {str(e)}")
+
     def _make_request(
         self,
         url: str,
