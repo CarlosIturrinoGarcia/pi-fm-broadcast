@@ -993,19 +993,26 @@ class GroupsPage(QWidget):
                     group.get("event_id")
                 )
 
+                logger.info(f"Processing group from list: {json.dumps(group, indent=2)}")
+
                 if not group_id:
                     logger.warning(f"Group has no ID, skipping: {group}")
                     continue
 
                 # Fetch full group details to get radio_frequency
                 try:
+                    logger.info(f"Fetching full details for group ID: {group_id}")
                     full_group = self.api_client.get_group_detail(group_id)
                     if full_group:
+                        logger.info(f"Full group details received: {json.dumps(full_group, indent=2)}")
                         # Use full group data which includes radio_frequency
                         group = full_group
-                        logger.info(f"Fetched full details for group {group_id}")
+                    else:
+                        logger.warning(f"get_group_detail returned None for {group_id}")
                 except Exception as e:
-                    logger.warning(f"Failed to fetch details for group {group_id}: {e}")
+                    logger.error(f"Failed to fetch details for group {group_id}: {e}")
+                    import traceback
+                    traceback.print_exc()
                     # Continue with basic group data
 
                 # Store the group data
@@ -1013,9 +1020,11 @@ class GroupsPage(QWidget):
 
                 # Display group name or ID
                 group_name = group.get("name", group.get("id", "Unknown Group"))
+                logger.info(f"Group name: '{group_name}'")
 
                 # Get frequency from group data
                 frequency = group.get("radio_frequency")
+                logger.info(f"Radio frequency for '{group_name}': {frequency}")
 
                 # Format display text with frequency if available
                 if frequency:
