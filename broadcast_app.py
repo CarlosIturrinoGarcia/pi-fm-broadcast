@@ -2193,6 +2193,73 @@ class MainWindow(QMainWindow):
 # Application Entry Point
 # =============================
 
+def fetch_sailing_group_frequency(api_client) -> Optional[float]:
+    """
+    Fetch the Sailing group's frequency from the API.
+
+    Args:
+        api_client: Authenticated PicnicAPIClient instance
+
+    Returns:
+        Frequency as float, or None if not found
+    """
+    SAILING_GROUP_ID = "6918ed90a92aa58974af4ed1"
+
+    try:
+        logger.info(f"Fetching Sailing group frequency...")
+        group = api_client.get_group_by_id(SAILING_GROUP_ID)
+
+        if not group:
+            logger.warning(f"Sailing group {SAILING_GROUP_ID} not found")
+            return None
+
+        # Try multiple possible field names for frequency
+        possible_fields = [
+            'radio_frequency', 'radioFrequency', 'frequency',
+            'fm_frequency', 'fmFrequency', 'broadcast_frequency', 'broadcastFrequency'
+        ]
+
+        frequency = None
+
+        # Check direct fields
+        for field in possible_fields:
+            if field in group and group[field] is not None:
+                frequency = group[field]
+                logger.info(f"Found frequency in field '{field}': {frequency}")
+                break
+
+        # Check nested fields
+        if frequency is None:
+            for nested in ['settings', 'config', 'broadcast_settings', 'broadcastSettings']:
+                if nested in group and isinstance(group[nested], dict):
+                    for field in possible_fields:
+                        if field in group[nested] and group[nested][field] is not None:
+                            frequency = group[nested][field]
+                            logger.info(f"Found frequency in nested field '{nested}.{field}': {frequency}")
+                            break
+                    if frequency is not None:
+                        break
+
+        # Convert to float if it's a string
+        if frequency is not None:
+            if isinstance(frequency, str):
+                try:
+                    frequency = float(frequency)
+                except ValueError:
+                    logger.warning(f"Invalid frequency value '{frequency}', ignoring")
+                    return None
+
+            logger.info(f"Sailing group frequency: {frequency:.1f} MHz")
+            return frequency
+
+        logger.warning("No frequency field found in Sailing group data")
+        return None
+
+    except Exception as e:
+        logger.warning(f"Failed to fetch Sailing group frequency: {e}")
+        return None
+
+
 def main():
     """Main application entry point."""
     from api_client import PicnicAPIClient
@@ -2222,8 +2289,17 @@ def main():
             # User cancelled or failed login
             sys.exit(0)
 
+    # Fetch Sailing group frequency and set as default
+    sailing_frequency = fetch_sailing_group_frequency(api_client)
+
     # User authenticated successfully, show main window
     w = MainWindow(api_client)
+
+    # Set the fetched frequency if available
+    if sailing_frequency is not None and validate_frequency(sailing_frequency):
+        logger.info(f"Setting dashboard frequency to Sailing group frequency: {sailing_frequency:.1f} MHz")
+        w.page_dashboard.freq_spin.setValue(sailing_frequency)
+
     w.show()
 
     sys.exit(app.exec_())

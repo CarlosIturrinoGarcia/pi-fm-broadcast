@@ -194,6 +194,34 @@ class PicnicAPIClient:
         """
         return self._user_data
 
+    def get_group_by_id(self, group_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Fetch a specific group by ID.
+
+        Args:
+            group_id: The group's _id
+
+        Returns:
+            Group data dictionary or None if not found
+
+        Raises:
+            TokenExpiredError: If the access token has expired
+            NetworkError: If network communication fails
+            PicnicAPIError: For other API errors
+        """
+        # Fetch all groups and find the matching one
+        groups = self.get_my_groups()
+
+        for group in groups:
+            # Try different possible ID field names
+            gid = group.get("id") or group.get("_id") or group.get("group_id") or group.get("event_id")
+            if gid == group_id:
+                logger.info(f"Found group {group_id}")
+                return group
+
+        logger.warning(f"Group {group_id} not found")
+        return None
+
     def _make_request(
         self,
         url: str,
