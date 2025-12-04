@@ -1531,17 +1531,26 @@ class MessageListScreen(QWidget):
         success_count = 0
         error_count = 0
 
-        for item in selected_items:
+        for i, item in enumerate(selected_items):
             msg = item.data(Qt.UserRole)
             formatted = self.broadcaster.format_message_for_display(msg)
 
             try:
-                # Broadcast the message
+                # Kill all pifm processes before EACH message to ensure /dev/mem is free
+                logger.info(f"Broadcasting message {i+1}/{len(selected_items)}...")
+                if i > 0:
+                    # For messages after the first, kill any leftover processes
+                    logger.info("Ensuring /dev/mem is free before next broadcast...")
+                    kill_all_pifm_processes()
+
+                # Broadcast the message (this waits for completion)
                 self.broadcaster.broadcast_message(
                     formatted["message_text"],
                     formatted["user_name"],
                     self.current_frequency
                 )
+
+                logger.info(f"Message {i+1}/{len(selected_items)} broadcast successfully")
 
                 # Visual feedback - green highlight
                 item.setBackground(Qt.green)
@@ -1553,13 +1562,13 @@ class MessageListScreen(QWidget):
                 item.setBackground(Qt.red)
                 item.setForeground(Qt.white)
                 error_count += 1
-                logger.error(f"Failed to broadcast message: {e}")
+                logger.error(f"Failed to broadcast message {i+1}: {e}")
 
             except Exception as e:
                 item.setBackground(Qt.red)
                 item.setForeground(Qt.white)
                 error_count += 1
-                logger.error(f"Unexpected error broadcasting message: {e}")
+                logger.error(f"Unexpected error broadcasting message {i+1}: {e}")
 
             QApplication.processEvents()
 
