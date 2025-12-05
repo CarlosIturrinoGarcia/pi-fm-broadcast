@@ -1193,19 +1193,9 @@ class GroupsPage(QWidget):
             # Update env_vars dict for immediate use
             env_vars["BROADCAST_CMD"] = new_broadcast_cmd
 
-            # Create a simple log list
-            log_messages = []
-
-            class LogCapture:
-                def append(self, msg):
-                    log_messages.append(msg)
-                    logger.info(f"Group silence carrier: {msg}")
-
-            log = LogCapture()
-
             # Start silence carrier on group's frequency
             logger.info(f"Starting silence carrier for group on {frequency:.1f} MHz")
-            parent_window._start_silence_carrier(frequency, env_vars, log)
+            parent_window._start_silence_carrier(frequency, env_vars)
 
             # Update status
             self.status_label.setText(f"✓ Broadcasting silence carrier on {frequency:.1f} MHz")
@@ -1608,19 +1598,9 @@ class MessageListScreen(QWidget):
             # Get environment variables
             env_vars = load_env_file(ENV_PATH)
 
-            # Create a simple log list for _start_silence_carrier
-            log_messages = []
-
-            class LogCapture:
-                def append(self, msg):
-                    log_messages.append(msg)
-                    logger.info(f"Silence carrier: {msg}")
-
-            log = LogCapture()
-
             # Restart silence carrier on current frequency
             logger.info(f"Restarting silence carrier on {self.current_frequency:.1f} MHz")
-            parent_window._start_silence_carrier(self.current_frequency, env_vars, log)
+            parent_window._start_silence_carrier(self.current_frequency, env_vars)
 
             # Update status with success
             self.status_label.setText(f"✓ Broadcast complete • Silence carrier restarted on {self.current_frequency:.1f} MHz")
