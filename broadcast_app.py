@@ -265,6 +265,9 @@ class OnScreenKeyboard(QWidget):
             list("zxcvbnm"),
         ]
 
+        # Special characters row
+        special_chars = list("!@#$%^&*()-_=+")
+
         g = QVBoxLayout()
         g.setContentsMargins(8, 6, 8, 8)
         g.setSpacing(6)
@@ -295,6 +298,9 @@ class OnScreenKeyboard(QWidget):
 
         g.addLayout(row_of(rows[3], prefix_widgets=[self.shift_btn], suffix_widgets=[backspace]))
 
+        # Add special characters row
+        g.addLayout(row_of(special_chars))
+
         hide = self._mk_btn("Hide", wide=True)
         hide.clicked.connect(self.hide)
 
@@ -314,7 +320,7 @@ class OnScreenKeyboard(QWidget):
         self.setLayout(g)
 
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setFixedHeight(220)
+        self.setFixedHeight(280)
         self.setStyleSheet("""
             #OnScreenKeyboard QPushButton { min-width: 36px; min-height: 40px; font-size: 16px; }
             #OnScreenKeyboard QPushButton[wide="true"] { min-width: 64px; }
@@ -1572,25 +1578,19 @@ class MessageListScreen(QWidget):
 
             QApplication.processEvents()
 
-        # Update status
+        # Update status (no popup dialogs)
         if error_count == 0:
             self.status_label.setText(f"✓ Successfully broadcast {success_count} message(s)")
             self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #2ecc94; font-weight: 600;")
-            QMessageBox.information(
-                self,
-                "Broadcast Complete",
-                f"Successfully broadcast {success_count} message(s) on {self.current_frequency:.1f} MHz"
-            )
         else:
             self.status_label.setText(
                 f"Broadcast complete: {success_count} succeeded, {error_count} failed"
             )
             self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #ff9800; font-weight: 600;")
-            QMessageBox.warning(
-                self,
-                "Broadcast Completed with Errors",
-                f"{success_count} message(s) broadcast successfully\n{error_count} message(s) failed"
-            )
+
+        # Automatically kill all pifm processes after broadcast
+        logger.info("Automatically killing all pifm processes after broadcast...")
+        kill_all_pifm_processes()
 
         # Restart silence carrier after broadcast to prevent static
         if success_count > 0:
