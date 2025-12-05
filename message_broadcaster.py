@@ -377,8 +377,8 @@ class PicnicMessageBroadcaster:
                         print("DEBUG: Broadcast complete!")
 
                         # Wait for the broadcast to complete before returning
-                        logger.info("Waiting 5 seconds for broadcast to complete")
-                        time.sleep(5)
+                        logger.info("Waiting 2 seconds for broadcast to complete")
+                        time.sleep(2)
                     else:
                         logger.error(f"Broadcast command failed: {result.stderr}")
                         print(f"DEBUG: Broadcast error: {result.stderr}")

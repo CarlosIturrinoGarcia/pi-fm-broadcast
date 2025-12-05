@@ -2127,6 +2127,17 @@ class MainWindow(QMainWindow):
                 logger.info("Cleaning up pifm processes after login...")
                 kill_all_pifm_processes()
 
+                # Auto-refresh groups and messages on login
+                logger.info("Refreshing groups tab after login...")
+                self.page_groups._groups_data = []  # Clear cached groups
+                self.page_groups.load_groups()  # Reload groups
+
+                # Clear messages data
+                logger.info("Clearing messages data after login...")
+                self.page_messages.messages_list.clear()
+                self.page_messages.messages_data = []
+                self.page_messages.current_group_id = None
+
                 # User logged in again, show main window
                 self.show()
             else:
