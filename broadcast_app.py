@@ -2036,8 +2036,8 @@ class MainWindow(QMainWindow):
             # Clear the token
             self.api_client.logout()
 
-            # Close main window
-            self.close()
+            # Hide main window (don't close it)
+            self.hide()
 
             # Show login dialog again
             login = LoginDialog(self.api_client, self)
@@ -2056,6 +2056,9 @@ class MainWindow(QMainWindow):
                 self.page_messages.messages_list.clear()
                 self.page_messages.messages_data = []
                 self.page_messages.current_group_id = None
+
+                # Navigate back to Groups page
+                self._goto(0)
 
                 # User logged in again, show main window
                 self.show()
