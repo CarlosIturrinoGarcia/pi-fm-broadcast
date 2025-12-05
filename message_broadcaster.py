@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import subprocess
+import time
 from datetime import datetime
 from typing import Optional, Dict, List, Any
 from urllib.request import Request, urlopen
@@ -349,6 +350,14 @@ class PicnicMessageBroadcaster:
                     logger.info(f"Broadcasting on FM {fm_frequency} MHz: {' '.join(cmd_args)}")
                     print(f"DEBUG: Broadcasting: {' '.join(cmd_args)}")
 
+                    # Kill all pifm processes to free /dev/mem before broadcasting
+                    logger.info("Killing all pifm processes to free /dev/mem")
+                    subprocess.run(['sudo', 'pkill', '-9', 'pifm'], capture_output=True)
+
+                    # Wait for the resource to be released
+                    logger.info("Waiting 1 second for /dev/mem to be released")
+                    time.sleep(1)
+
                     # Execute without shell=True to prevent command injection
                     result = subprocess.run(
                         cmd_args,
@@ -358,9 +367,18 @@ class PicnicMessageBroadcaster:
                         timeout=300  # 5 minute timeout
                     )
 
+                    # Log the actual output to see if broadcast worked
+                    logger.info(f"Broadcast return code: {result.returncode}")
+                    logger.info(f"Broadcast stdout: {result.stdout}")
+                    logger.info(f"Broadcast stderr: {result.stderr}")
+
                     if result.returncode == 0:
                         logger.info("FM broadcast completed successfully")
                         print("DEBUG: Broadcast complete!")
+
+                        # Wait for the broadcast to complete before returning
+                        logger.info("Waiting 5 seconds for broadcast to complete")
+                        time.sleep(5)
                     else:
                         logger.error(f"Broadcast command failed: {result.stderr}")
                         print(f"DEBUG: Broadcast error: {result.stderr}")
