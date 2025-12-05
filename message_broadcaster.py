@@ -185,10 +185,13 @@ class PicnicMessageBroadcaster:
                 - timestamp: Formatted time string
                 - display_text: Combined formatted text
         """
-        # Extract user information
-        user_info = message.get("user", {})
-        first_name = user_info.get("first_name", "Unknown")
-        last_name = user_info.get("last_name", "User")
+        # Extract user information with null safety
+        user_info = message.get("user")
+        if user_info is None or not isinstance(user_info, dict):
+            user_info = {}
+
+        first_name = user_info.get("first_name") or "Unknown"
+        last_name = user_info.get("last_name") or "User"
         user_name = f"{first_name} {last_name}".strip()
 
         # Extract message text

@@ -102,6 +102,8 @@ def kill_all_pifm_processes():
     This is critical when switching users or starting new broadcasts
     to ensure /dev/mem is released and no conflicts occur.
     """
+    import time
+
     try:
         logger.info("Killing all pifm processes...")
 
@@ -119,12 +121,15 @@ def kill_all_pifm_processes():
             timeout=5
         )
 
-        # Brief delay to ensure /dev/mem is released
-        import time
-        time.sleep(0.5)
+        # Wait longer to ensure /dev/mem is fully released
+        time.sleep(1.0)
 
         logger.info("All pifm processes killed")
 
+    except subprocess.TimeoutExpired:
+        logger.error("Timeout killing pifm processes")
+    except FileNotFoundError:
+        logger.warning("pkill command not found")
     except Exception as e:
         logger.warning(f"Failed to kill pifm processes: {e}")
 
@@ -682,7 +687,6 @@ class LoginDialog(QDialog):
         # Disable login button while processing
         self.login_btn.setEnabled(False)
         self.login_btn.setText("Logging in...")
-        QApplication.processEvents()
 
         try:
             # Attempt API login
@@ -1501,6 +1505,12 @@ class MessageListScreen(QWidget):
             QMessageBox.critical(self, "Error", "Broadcaster not initialized. Please try again.")
             return
 
+        # Validate broadcaster has required method
+        if not hasattr(self.broadcaster, 'broadcast_message') or not callable(getattr(self.broadcaster, 'broadcast_message')):
+            QMessageBox.critical(self, "Error", "Broadcaster is not properly configured.")
+            logger.error("Broadcaster missing broadcast_message method")
+            return
+
         # Kill all pifm processes BEFORE broadcasting to free /dev/mem
         logger.info("Cleaning up pifm processes before message broadcast...")
         kill_all_pifm_processes()
@@ -1845,8 +1855,7 @@ class MainWindow(QMainWindow):
 
             # CRITICAL: Validate PID before sending signals
             if pid <= 0:
-                logger.warning(f"Invalid PID {pid}, cannot signal process")
-                logger.error(f"Invalid process ID: {pid}")
+                logger.error(f"Invalid process ID: {pid}, restarting service")
                 self._start_broadcaster_with_env(env_vars, fresh=True)
             else:
                 try:
@@ -1860,16 +1869,10 @@ class MainWindow(QMainWindow):
                     logger.info(f"Process {pid} not found, restarting service...")
                     self._start_broadcaster_with_env(env_vars, fresh=True)
                 except PermissionError as e:
-                    logger.error(f"Permission denied signaling process {pid}: {e}")
                     logger.error(f"Permission error sending signal to PID {pid}: {e}")
                     QMessageBox.critical(self, "Permission Error", f"Cannot signal process (need sudo?): {e}")
                 except OSError as e:
-                    logger.error(f"OS error signaling process {pid}: {e}")
                     logger.error(f"OS error sending signal to PID {pid}: {e}")
-                    self._start_broadcaster_with_env(env_vars, fresh=True)
-                except Exception as e:
-                    logger.error(f"Failed to signal process: {e}")
-                    logger.error(f"Unexpected error signaling PID {pid}: {e}")
                     self._start_broadcaster_with_env(env_vars, fresh=True)
         else:
             logger.info("Service not running, starting...")
@@ -2006,6 +2009,13 @@ class MainWindow(QMainWindow):
         if self.proc and self.proc.state() != QProcess.NotRunning:
             logger.info("Stopping service...")
 
+            # Disconnect signals before terminating
+            try:
+                self.proc.readyReadStandardOutput.disconnect()
+                self.proc.finished.disconnect()
+            except TypeError:
+                pass  # Signals already disconnected
+
             self.proc.terminate()
             if not self.proc.waitForFinished(3000):
                 logger.warning("Service did not terminate gracefully, forcing shutdown...")
@@ -2013,7 +2023,8 @@ class MainWindow(QMainWindow):
                 self.proc.waitForFinished(1000)
 
             logger.info("Service stopped")
-        self.proc = None
+            self.proc.deleteLater()
+            self.proc = None
 
     # ---------- QProcess Output ----------
 
@@ -2149,11 +2160,6 @@ class MainWindow(QMainWindow):
         geo = self.settings.value("ui/geometry")
         if geo is not None:
             self.restoreGeometry(geo)
-
-    def _timestamp(self):
-        """Get formatted timestamp for logging."""
-        import datetime
-        return datetime.datetime.now().strftime("%H:%M:%S")
 
 
 # =============================
