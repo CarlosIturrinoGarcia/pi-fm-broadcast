@@ -1665,12 +1665,39 @@ class MainWindow(QMainWindow):
 
         side_wrap = QWidget()
         side_wrap.setLayout(side)
-        side_wrap.setFixedWidth(160)
+        side_wrap.setFixedWidth(200)
         side_wrap.setObjectName("Sidebar")
         side_wrap.setStyleSheet(
-            "#Sidebar {border-right: 1px solid palette(mid); padding: 8px;}\n"
-            "QPushButton {text-align: left; padding: 10px; min-height: 44px;}\n"
-            "QPushButton:checked {font-weight: 600; background: #e8f8f2;}"
+            "#Sidebar {\n"
+            "    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f0fdf9, stop:1 #e8f5ef);\n"
+            "    border-right: 2px solid #cdeee0;\n"
+            "    padding: 16px 12px;\n"
+            "}\n"
+            "#Sidebar QPushButton {\n"
+            "    text-align: left;\n"
+            "    padding: 16px 20px;\n"
+            "    min-height: 52px;\n"
+            "    font-size: 16px;\n"
+            "    font-weight: 600;\n"
+            "    border-radius: 12px;\n"
+            "    background: transparent;\n"
+            "    color: #1a1a1a;\n"
+            "    border: 2px solid transparent;\n"
+            "    margin: 4px 0px;\n"
+            "}\n"
+            "#Sidebar QPushButton:hover {\n"
+            "    background: #ffffff;\n"
+            "    border: 2px solid #cdeee0;\n"
+            "}\n"
+            "#Sidebar QPushButton:checked {\n"
+            "    font-weight: 700;\n"
+            "    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);\n"
+            "    color: #ffffff;\n"
+            "    border: 2px solid #6fcaa6;\n"
+            "}\n"
+            "#Sidebar QPushButton:pressed {\n"
+            "    background: #cdeee0;\n"
+            "}"
         )
 
         # Pages
@@ -1684,8 +1711,14 @@ class MainWindow(QMainWindow):
         # Compose
         root.addWidget(side_wrap)
         content = QVBoxLayout()
+        content.setContentsMargins(24, 24, 24, 24)
+        content.setSpacing(16)
         content_wrap = QWidget()
         content_wrap.setLayout(content)
+        content_wrap.setObjectName("ContentArea")
+        content_wrap.setStyleSheet(
+            "#ContentArea { background: #fafbfa; }"
+        )
         content.addWidget(self.pages, 1)
         root.addWidget(content_wrap, 1)
 
@@ -1696,13 +1729,6 @@ class MainWindow(QMainWindow):
 
         # System tray
         self._setup_tray()
-
-        # Touch-friendly styling
-        self.setStyleSheet("""
-            QPushButton { min-height: 44px; font-size: 16px; }
-            QDoubleSpinBox { min-height: 44px; font-size: 16px; }
-            QCheckBox { min-height: 36px; font-size: 15px; }
-        """)
 
         # Check WiFi connection on startup (delayed to ensure window is shown)
         QTimer.singleShot(500, self._check_wifi_on_startup)
