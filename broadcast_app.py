@@ -2036,12 +2036,22 @@ class MainWindow(QMainWindow):
             # Clear the token
             self.api_client.logout()
 
-            # Hide main window (don't close it)
-            self.hide()
+            # Disable main window (keep it visible but inactive)
+            self.setEnabled(False)
+            logger.info("Main window disabled for login")
 
-            # Show login dialog again (with no parent to avoid close issues)
-            login = LoginDialog(self.api_client)
-            if login.exec_() == QDialog.Accepted:
+            # Show login dialog again (modal, with main window as parent)
+            login = LoginDialog(self.api_client, self)
+            login.setModal(True)
+            login_result = login.exec_()
+
+            # Re-enable main window
+            self.setEnabled(True)
+            logger.info("Main window re-enabled")
+
+            if login_result == QDialog.Accepted:
+                logger.info("Login successful, refreshing UI...")
+
                 # Kill all pifm processes before new user session
                 logger.info("Cleaning up pifm processes after login...")
                 kill_all_pifm_processes()
@@ -2057,14 +2067,12 @@ class MainWindow(QMainWindow):
                 # Navigate back to Groups page
                 self._goto(0)
 
-                # User logged in again, show main window
-                self.show()
-
-                # Now load groups after window is visible
+                # Load groups for new user
                 logger.info("Refreshing groups tab after login...")
                 QTimer.singleShot(100, self.page_groups.load_groups)
             else:
                 # User cancelled, exit application
+                logger.info("Login cancelled, exiting application")
                 QApplication.instance().quit()
 
     # ---------- System Tray ----------
