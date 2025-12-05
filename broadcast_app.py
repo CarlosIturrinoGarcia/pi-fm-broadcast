@@ -2039,20 +2039,17 @@ class MainWindow(QMainWindow):
             # Hide main window (don't close it)
             self.hide()
 
-            # Show login dialog again
-            login = LoginDialog(self.api_client, self)
+            # Show login dialog again (with no parent to avoid close issues)
+            login = LoginDialog(self.api_client)
             if login.exec_() == QDialog.Accepted:
                 # Kill all pifm processes before new user session
                 logger.info("Cleaning up pifm processes after login...")
                 kill_all_pifm_processes()
 
-                # Auto-refresh groups and messages on login
-                logger.info("Refreshing groups tab after login...")
+                # Clear cached data
+                logger.info("Clearing cached data after login...")
                 self.page_groups._groups_data = []  # Clear cached groups
-                self.page_groups.load_groups()  # Reload groups
-
-                # Clear messages data
-                logger.info("Clearing messages data after login...")
+                self.page_groups.groups_list.clear()  # Clear UI list
                 self.page_messages.messages_list.clear()
                 self.page_messages.messages_data = []
                 self.page_messages.current_group_id = None
@@ -2062,6 +2059,10 @@ class MainWindow(QMainWindow):
 
                 # User logged in again, show main window
                 self.show()
+
+                # Now load groups after window is visible
+                logger.info("Refreshing groups tab after login...")
+                QTimer.singleShot(100, self.page_groups.load_groups)
             else:
                 # User cancelled, exit application
                 QApplication.instance().quit()
