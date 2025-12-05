@@ -1163,7 +1163,7 @@ class GroupsPage(QWidget):
 
             # Set the group and navigate
             parent_window.page_messages.set_group(group_id, group_name, frequency)
-            parent_window._goto(2)  # Navigate to messages page
+            parent_window._goto(1)  # Navigate to messages page
 
     def _start_group_silence_carrier(self, frequency: float, parent_window):
         """Start silence carrier when a group is selected."""
@@ -1511,18 +1511,6 @@ class MessageListScreen(QWidget):
             QMessageBox.critical(self, "Error", "Broadcaster not initialized. Please try again.")
             return
 
-        # Confirm broadcast
-        reply = QMessageBox.question(
-            self,
-            "Confirm Broadcast",
-            f"Broadcast {len(selected_items)} message(s) on {self.current_frequency:.1f} MHz?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes
-        )
-
-        if reply != QMessageBox.Yes:
-            return
-
         # Kill all pifm processes BEFORE broadcasting to free /dev/mem
         logger.info("Cleaning up pifm processes before message broadcast...")
         kill_all_pifm_processes()
@@ -1650,7 +1638,7 @@ class MessageListScreen(QWidget):
         # Signal parent to switch page
         parent_window = self.window()
         if hasattr(parent_window, '_goto'):
-            parent_window._goto(1)  # Go to Groups page
+            parent_window._goto(0)  # Go to Groups page
 
 
 # =============================
@@ -1681,14 +1669,11 @@ class MainWindow(QMainWindow):
 
         # Sidebar
         side = QVBoxLayout()
-        self.btn_dashboard = QPushButton("Dashboard")
         self.btn_groups = QPushButton("Groups")
         self.btn_wifi = QPushButton("WiFi")
-        self.btn_dashboard.setCheckable(True)
         self.btn_groups.setCheckable(True)
-        self.btn_dashboard.setChecked(True)
+        self.btn_groups.setChecked(True)
 
-        side.addWidget(self.btn_dashboard)
         side.addWidget(self.btn_groups)
         side.addWidget(self.btn_wifi)
         side.addStretch(1)
@@ -1710,18 +1695,11 @@ class MainWindow(QMainWindow):
 
         # Pages
         self.pages = QStackedWidget()
-        self.page_dashboard = DashboardPage()
         self.page_groups = GroupsPage(api_client)
         self.page_messages = MessageListScreen(api_client)
 
-        # Load frequency from env file
-        freq_from_env = extract_current_frequency(ENV_PATH)
-        if freq_from_env is not None and validate_frequency(freq_from_env):
-            self.page_dashboard.freq_spin.setValue(freq_from_env)
-
-        self.pages.addWidget(self.page_dashboard)  # Index 0
-        self.pages.addWidget(self.page_groups)     # Index 1
-        self.pages.addWidget(self.page_messages)   # Index 2
+        self.pages.addWidget(self.page_groups)     # Index 0
+        self.pages.addWidget(self.page_messages)   # Index 1
 
         # Compose
         root.addWidget(side_wrap)
@@ -1731,18 +1709,8 @@ class MainWindow(QMainWindow):
         content.addWidget(self.pages, 1)
         root.addWidget(content_wrap, 1)
 
-        # Restore saved frequency
-        try:
-            saved_freq = float(self.settings.value("radio/frequency", 90.8))
-            if validate_frequency(saved_freq):
-                self.page_dashboard.freq_spin.setValue(saved_freq)
-        except (ValueError, TypeError):
-            pass
-
         # Connect signals
-        self.page_dashboard.freq_set.connect(self.on_set_frequency)
-        self.btn_dashboard.clicked.connect(lambda: self._goto(0))
-        self.btn_groups.clicked.connect(lambda: self._goto(1))
+        self.btn_groups.clicked.connect(lambda: self._goto(0))
         self.btn_wifi.clicked.connect(self.open_wifi_dialog)
         self.btn_logout.clicked.connect(self.handle_logout)
 
@@ -1755,9 +1723,6 @@ class MainWindow(QMainWindow):
             QDoubleSpinBox { min-height: 44px; font-size: 16px; }
             QCheckBox { min-height: 36px; font-size: 15px; }
         """)
-
-        # Start health monitoring
-        self._start_health_monitoring()
 
         # Check WiFi connection on startup (delayed to ensure window is shown)
         QTimer.singleShot(500, self._check_wifi_on_startup)
@@ -1863,9 +1828,8 @@ class MainWindow(QMainWindow):
             )
             return
 
-        log = self.page_dashboard.log
-        log.append(f"\n[{self._timestamp()}] Frequency set to {freq:.1f} MHz")
-        log.append(f"BROADCAST_CMD updated: {new_cmd}")
+        logger.info(f"Frequency set to {freq:.1f} MHz")
+        logger.info(f"BROADCAST_CMD updated: {new_cmd}")
 
         # Signal running service or start it
         running = self.proc and self.proc.state() != QProcess.NotRunning
@@ -1875,38 +1839,38 @@ class MainWindow(QMainWindow):
 
             # CRITICAL: Validate PID before sending signals
             if pid <= 0:
-                log.append(f"WARNING: Invalid PID {pid}, cannot signal process")
+                logger.warning(f"Invalid PID {pid}, cannot signal process")
                 logger.error(f"Invalid process ID: {pid}")
                 self._start_broadcaster_with_env(env_vars, fresh=True)
             else:
                 try:
                     if immediate:
                         os.kill(pid, signal.SIGUSR2)
-                        log.append(f"Sent SIGUSR2 to PID {pid} (immediate switch)")
+                        logger.info(f"Sent SIGUSR2 to PID {pid} (immediate switch)")
                     else:
                         os.kill(pid, signal.SIGHUP)
-                        log.append(f"Sent SIGHUP to PID {pid} (reload after current message)")
+                        logger.info(f"Sent SIGHUP to PID {pid} (reload after current message)")
                 except ProcessLookupError:
-                    log.append(f"Process {pid} not found, restarting service...")
+                    logger.info(f"Process {pid} not found, restarting service...")
                     self._start_broadcaster_with_env(env_vars, fresh=True)
                 except PermissionError as e:
-                    log.append(f"Permission denied signaling process {pid}: {e}")
+                    logger.error(f"Permission denied signaling process {pid}: {e}")
                     logger.error(f"Permission error sending signal to PID {pid}: {e}")
                     QMessageBox.critical(self, "Permission Error", f"Cannot signal process (need sudo?): {e}")
                 except OSError as e:
-                    log.append(f"OS error signaling process {pid}: {e}")
+                    logger.error(f"OS error signaling process {pid}: {e}")
                     logger.error(f"OS error sending signal to PID {pid}: {e}")
                     self._start_broadcaster_with_env(env_vars, fresh=True)
                 except Exception as e:
-                    log.append(f"Failed to signal process: {e}")
+                    logger.error(f"Failed to signal process: {e}")
                     logger.error(f"Unexpected error signaling PID {pid}: {e}")
                     self._start_broadcaster_with_env(env_vars, fresh=True)
         else:
-            log.append("Service not running, starting...")
+            logger.info("Service not running, starting...")
             self._start_broadcaster_with_env(env_vars, fresh=True)
 
         # Start silence carrier to prevent static
-        self._start_silence_carrier(freq, env_vars, log)
+        self._start_silence_carrier(freq, env_vars)
 
         QMessageBox.information(
             self,
@@ -1914,12 +1878,12 @@ class MainWindow(QMainWindow):
             f"Broadcasting frequency {'switched to' if immediate else 'will switch to'} {freq:.1f} MHz"
         )
 
-    def _start_silence_carrier(self, freq: float, env_vars: dict, log):
+    def _start_silence_carrier(self, freq: float, env_vars: dict):
         """Start broadcasting silence carrier to prevent static."""
         import wave
 
         # Kill all existing pifm processes before starting silence carrier
-        log.append("Cleaning up existing pifm processes...")
+        logger.info("Cleaning up existing pifm processes...")
         kill_all_pifm_processes()
 
         # Ensure WAV directory exists
@@ -1933,7 +1897,7 @@ class MainWindow(QMainWindow):
         try:
             # Create silence WAV if it doesn't exist (1800 seconds = 30 minutes)
             if not os.path.exists(silence_file):
-                log.append(f"Creating silence carrier file: {silence_file}")
+                logger.info(f"Creating silence carrier file: {silence_file}")
                 with wave.open(silence_file, "wb") as wav:
                     wav.setnchannels(1)  # Mono
                     wav.setsampwidth(2)  # 16-bit
@@ -1944,7 +1908,7 @@ class MainWindow(QMainWindow):
                     silence_data = b"\x00\x00" * 16000 * silence_secs
                     wav.writeframes(silence_data)
 
-                log.append("Silence carrier file created successfully")
+                logger.info("Silence carrier file created successfully")
 
             # Validate frequency
             if not isinstance(freq, (int, float)) or freq < 76.0 or freq > 108.0:
@@ -1970,8 +1934,8 @@ class MainWindow(QMainWindow):
                 else:
                     cmd_args.append(part)
 
-            log.append(f"Starting silence carrier on {freq:.1f} MHz...")
-            log.append(f"Command: {' '.join(cmd_args)}")
+            logger.info(f"Starting silence carrier on {freq:.1f} MHz...")
+            logger.info(f"Command: {' '.join(cmd_args)}")
 
             # Start silence carrier in background without shell=True
             # Note: We don't track this process intentionally - it should run until killed
@@ -1983,10 +1947,10 @@ class MainWindow(QMainWindow):
                 stdin=subprocess.DEVNULL
             )
 
-            log.append("Silence carrier started successfully")
+            logger.info("Silence carrier started successfully")
 
         except Exception as e:
-            log.append(f"Warning: Could not start silence carrier: {e}")
+            logger.warning(f"Warning: Could not start silence carrier: {e}")
             logger.warning(f"Failed to start silence carrier: {e}")
 
     def _start_broadcaster_with_env(self, env_vars: dict, fresh: bool = False):
@@ -1994,14 +1958,12 @@ class MainWindow(QMainWindow):
         if fresh:
             self._stop_script()
 
-        log = self.page_dashboard.log
-
         # Determine Python executable
         py = PYTHON_BIN if os.path.isfile(PYTHON_BIN) else sys.executable
 
         # Check if service executable exists
         if not os.path.exists(SERVICE_PATH):
-            log.append(f"\nERROR: Service not found at {SERVICE_PATH}")
+            logger.error(f"Service not found at {SERVICE_PATH}")
             QMessageBox.critical(
                 self,
                 "Service Not Found",
@@ -2010,7 +1972,7 @@ class MainWindow(QMainWindow):
             )
             return
 
-        log.append(f"\n[{self._timestamp()}] Starting service: {py} {SERVICE_PATH}")
+        logger.info(f"Starting service: {py} {SERVICE_PATH}")
 
         # Create QProcess if needed
         if not (self.proc and self.proc.state() != QProcess.NotRunning):
@@ -2029,23 +1991,22 @@ class MainWindow(QMainWindow):
         # Start process
         self.proc.start(py, [SERVICE_PATH])
         if not self.proc.waitForStarted(5000):
-            log.append(f"ERROR: Failed to start service")
+            logger.error("Failed to start service")
             QMessageBox.critical(self, "Startup Failed", "Failed to start the broadcaster service.")
             self.proc = None
 
     def _stop_script(self):
         """Stop the running broadcaster process."""
         if self.proc and self.proc.state() != QProcess.NotRunning:
-            log = self.page_dashboard.log
-            log.append(f"\n[{self._timestamp()}] Stopping service...")
+            logger.info("Stopping service...")
 
             self.proc.terminate()
             if not self.proc.waitForFinished(3000):
-                log.append("Service did not terminate gracefully, forcing shutdown...")
+                logger.warning("Service did not terminate gracefully, forcing shutdown...")
                 self.proc.kill()
                 self.proc.waitForFinished(1000)
 
-            log.append("Service stopped")
+            logger.info("Service stopped")
         self.proc = None
 
     # ---------- QProcess Output ----------
@@ -2056,33 +2017,12 @@ class MainWindow(QMainWindow):
             return
         data = bytes(self.proc.readAllStandardOutput()).decode(errors="ignore")
         if data:
-            cursor = self.page_dashboard.log.textCursor()
-            cursor.movePosition(cursor.End)
-            cursor.insertText(data)
-            self.page_dashboard.log.setTextCursor(cursor)
-            self.page_dashboard.log.ensureCursorVisible()
+            logger.debug(f"Process output: {data}")
 
     def _on_finished(self, exitCode, exitStatus):
         """Handle broadcaster process exit."""
         status_str = "normal" if exitStatus == QProcess.NormalExit else "crashed"
-        self.page_dashboard.log.append(
-            f"\n[{self._timestamp()}] Process exited: code={exitCode}, status={status_str}"
-        )
-
-    # ---------- Health Monitoring ----------
-
-    def _start_health_monitoring(self):
-        """Start background health monitoring."""
-        self.health_worker = HealthMonitorWorker()
-        self.health_worker.metrics_updated.connect(self.page_dashboard.update_service_status)
-        self.health_worker.start()
-
-    def _stop_health_monitoring(self):
-        """Stop background health monitoring."""
-        if self.health_worker:
-            self.health_worker.stop()
-            self.health_worker.wait(2000)
-            self.health_worker = None
+        logger.info(f"Process exited: code={exitCode}, status={status_str}")
 
     # ---------- Wi-Fi ----------
 
@@ -2096,8 +2036,7 @@ class MainWindow(QMainWindow):
     def _goto(self, index: int):
         """Navigate to page by index."""
         self.pages.setCurrentIndex(index)
-        self.btn_dashboard.setChecked(index == 0)
-        self.btn_groups.setChecked(index == 1)
+        self.btn_groups.setChecked(index == 0)
 
     def handle_logout(self):
         """Handle user logout."""
@@ -2180,9 +2119,6 @@ class MainWindow(QMainWindow):
     def closeEvent(self, e):
         """Handle window close event."""
         self.settings.setValue("ui/geometry", self.saveGeometry())
-
-        # Stop background workers
-        self._stop_health_monitoring()
 
         # Stop service (optional - service can continue running)
         # Uncomment if you want to stop service on dashboard close:
@@ -2286,12 +2222,6 @@ def main():
 
     # User authenticated successfully, show main window
     w = MainWindow(api_client)
-
-    # Set the fetched frequency if available
-    if sailing_frequency is not None and validate_frequency(sailing_frequency):
-        logger.info(f"Setting dashboard frequency to Sailing group frequency: {sailing_frequency:.1f} MHz")
-        w.page_dashboard.freq_spin.setValue(sailing_frequency)
-
     w.show()
 
     sys.exit(app.exec_())
