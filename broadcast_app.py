@@ -464,6 +464,53 @@ class WifiDialog(QDialog):
         # Make dialog larger to fit screen better
         self.resize(700, 550)
 
+        # Apply styling to match login page
+        self.setStyleSheet("""
+            QDialog {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafbfa, stop:1 #f0fdf9);
+            }
+            QLabel {
+                font-size: 16px;
+                color: #1a1a1a;
+            }
+            QListWidget {
+                background: white;
+                border: 2px solid #cdeee0;
+                border-radius: 8px;
+                padding: 8px;
+                font-size: 14px;
+            }
+            QListWidget::item {
+                padding: 12px;
+                border-radius: 6px;
+            }
+            QListWidget::item:selected {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);
+                color: white;
+            }
+            QPushButton {
+                font-size: 16px;
+                font-weight: 600;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);
+                color: white;
+                border: 2px solid #6fcaa6;
+                border-radius: 8px;
+                padding: 10px 20px;
+                min-height: 40px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7fdcb7, stop:1 #6fcaa6);
+            }
+            QPushButton:pressed {
+                background: #5cb892;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+                border: 2px solid #aaa;
+            }
+        """)
+
         self.form = QFormLayout(self)
         self.info = QLabel("Scanning nearby Wi-Fi networks…")
         self.form.addRow(self.info)
@@ -505,6 +552,46 @@ class WifiDialog(QDialog):
         # Password dialog with embedded keyboard
         pwd_dlg = QDialog(self)
         pwd_dlg.setWindowTitle(f"Password for {ssid}")
+        pwd_dlg.resize(700, 550)
+
+        # Apply same styling to password dialog
+        pwd_dlg.setStyleSheet("""
+            QDialog {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafbfa, stop:1 #f0fdf9);
+            }
+            QLabel {
+                font-size: 16px;
+                font-weight: 600;
+                color: #1a1a1a;
+            }
+            QLineEdit {
+                padding: 12px;
+                font-size: 16px;
+                background: white;
+                border: 2px solid #cdeee0;
+                border-radius: 8px;
+                min-height: 50px;
+            }
+            QLineEdit:focus {
+                border: 2px solid #6fcaa6;
+            }
+            QPushButton {
+                font-size: 16px;
+                font-weight: 600;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);
+                color: white;
+                border: 2px solid #6fcaa6;
+                border-radius: 8px;
+                padding: 10px 20px;
+                min-height: 40px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7fdcb7, stop:1 #6fcaa6);
+            }
+            QPushButton:pressed {
+                background: #5cb892;
+            }
+        """)
 
         v = QVBoxLayout(pwd_dlg)
         form = QFormLayout()
@@ -520,6 +607,34 @@ class WifiDialog(QDialog):
 
         kb = OnScreenKeyboard(pwd_dlg, target=pwd_input)
         kb.setVisible(True)
+        # Apply login page keyboard styling
+        kb.setStyleSheet("""
+            #OnScreenKeyboard {
+                background: transparent;
+                padding: 8px;
+            }
+            #OnScreenKeyboard QPushButton {
+                min-width: 40px;
+                min-height: 45px;
+                font-size: 16px;
+                font-weight: 600;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);
+                color: white;
+                border: 2px solid #6fcaa6;
+                border-radius: 8px;
+            }
+            #OnScreenKeyboard QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7fdcb7, stop:1 #6fcaa6);
+            }
+            #OnScreenKeyboard QPushButton:pressed {
+                background: #5cb892;
+            }
+            #OnScreenKeyboard QPushButton[wide="true"] {
+                min-width: 120px;
+                font-size: 18px;
+                font-weight: 700;
+            }
+        """)
         v.addWidget(kb)
 
         dbb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
