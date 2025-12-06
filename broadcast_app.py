@@ -602,7 +602,8 @@ class LoginPage(QWidget):
         container.setMaximumWidth(600)
         container.setStyleSheet("""
             QWidget {
-                background-color: white;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f0fdf9, stop:1 #e8f5ef);
+                border: 2px solid #cdeee0;
                 border-radius: 12px;
             }
         """)
@@ -612,13 +613,13 @@ class LoginPage(QWidget):
         v.setContentsMargins(40, 40, 40, 40)
 
         # Title
-        title = QLabel("FM Broadcast Dashboard")
-        title.setStyleSheet("font-size: 32px; font-weight: 700; padding: 20px; color: #2196F3;")
+        title = QLabel("Picnic Groups Broadcast Station")
+        title.setStyleSheet("font-size: 32px; font-weight: 700; padding: 20px; color: #2ecc94;")
         title.setAlignment(Qt.AlignCenter)
         v.addWidget(title)
 
         subtitle = QLabel("Please log in to continue")
-        subtitle.setStyleSheet("font-size: 18px; color: #666; padding-bottom: 20px;")
+        subtitle.setStyleSheet("font-size: 18px; color: #555; padding-bottom: 20px;")
         subtitle.setAlignment(Qt.AlignCenter)
         v.addWidget(subtitle)
 
@@ -626,11 +627,11 @@ class LoginPage(QWidget):
         self.keyboard = OnScreenKeyboard(self)
         # Keep keyboard always visible on login page for easy access
         self.keyboard.setVisible(True)
-        # Add styling to make keyboard more visible
+        # Add styling to make keyboard more visible and match app theme
         self.keyboard.setStyleSheet("""
             #OnScreenKeyboard {
-                background-color: #ffffff;
-                border-top: 2px solid #ddd;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f0fdf9, stop:1 #e8f5ef);
+                border-top: 2px solid #cdeee0;
                 padding: 8px;
             }
             #OnScreenKeyboard QPushButton {
@@ -638,16 +639,19 @@ class LoginPage(QWidget):
                 min-height: 45px;
                 font-size: 16px;
                 font-weight: 600;
-                background-color: #f0f0f0;
-                border: 1px solid #ccc;
-                border-radius: 4px;
+                background-color: white;
+                border: 2px solid #cdeee0;
+                border-radius: 8px;
+                color: #1a1a1a;
             }
             #OnScreenKeyboard QPushButton:hover {
-                background-color: #e0e0e0;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #e8f5ef, stop:1 #d5ebe0);
+                border-color: #6fcaa6;
             }
             #OnScreenKeyboard QPushButton:pressed {
-                background-color: #2196F3;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);
                 color: white;
+                border-color: #6fcaa6;
             }
             #OnScreenKeyboard QPushButton[wide="true"] {
                 min-width: 80px;
@@ -660,7 +664,7 @@ class LoginPage(QWidget):
         form.setLabelAlignment(Qt.AlignRight)
 
         email_label = QLabel("Email:")
-        email_label.setStyleSheet("font-size: 16px; font-weight: 600;")
+        email_label.setStyleSheet("font-size: 16px; font-weight: 600; color: #1a1a1a;")
 
         self.username_input = KeyboardLineEdit(self.keyboard)
         self.username_input.setPlaceholderText("Enter email address")
@@ -668,12 +672,13 @@ class LoginPage(QWidget):
         self.username_input.setStyleSheet("""
             font-size: 16px;
             padding: 8px;
-            border: 2px solid #ddd;
-            border-radius: 6px;
+            border: 2px solid #cdeee0;
+            border-radius: 8px;
+            background-color: white;
         """)
 
         password_label = QLabel("Password:")
-        password_label.setStyleSheet("font-size: 16px; font-weight: 600;")
+        password_label.setStyleSheet("font-size: 16px; font-weight: 600; color: #1a1a1a;")
 
         self.password_input = KeyboardLineEdit(self.keyboard)
         self.password_input.setPlaceholderText("Enter password")
@@ -682,8 +687,9 @@ class LoginPage(QWidget):
         self.password_input.setStyleSheet("""
             font-size: 16px;
             padding: 8px;
-            border: 2px solid #ddd;
-            border-radius: 6px;
+            border: 2px solid #cdeee0;
+            border-radius: 8px;
+            background-color: white;
         """)
         self.password_input.returnPressed.connect(self.validate_login)
 
@@ -713,20 +719,22 @@ class LoginPage(QWidget):
             QPushButton {
                 font-size: 18px;
                 font-weight: 600;
-                background-color: #2196F3;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);
                 color: white;
-                border-radius: 8px;
+                border: 2px solid #6fcaa6;
+                border-radius: 12px;
                 padding: 12px;
             }
             QPushButton:hover {
-                background-color: #1976D2;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7fdcb7, stop:1 #6fcaa6);
             }
             QPushButton:pressed {
-                background-color: #0D47A1;
+                background: #5cb892;
             }
             QPushButton:disabled {
                 background-color: #cccccc;
                 color: #666666;
+                border: 2px solid #aaa;
             }
         """)
         self.login_btn.clicked.connect(self.validate_login)
@@ -748,8 +756,8 @@ class LoginPage(QWidget):
         # Add keyboard widget OUTSIDE the centered container so it spans full width
         main_layout.addWidget(self.keyboard)
 
-        # Set background color for the page
-        self.setStyleSheet("background-color: #f5f5f5;")
+        # Set background to match app theme
+        self.setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafbfa, stop:1 #f0fdf9);")
 
         # Set initial focus
         self.username_input.setFocus(Qt.OtherFocusReason)
