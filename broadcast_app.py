@@ -597,7 +597,12 @@ class LoginPage(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Create a centered container
+        # Title above the login box
+        title = QLabel("Picnic Groups Broadcast Station")
+        title.setStyleSheet("font-size: 36px; font-weight: 700; padding: 40px 20px 20px 20px; color: #2ecc94;")
+        title.setAlignment(Qt.AlignCenter)
+
+        # Create a centered container for login form
         container = QWidget()
         container.setMaximumWidth(600)
         container.setStyleSheet("""
@@ -612,14 +617,8 @@ class LoginPage(QWidget):
         v.setSpacing(20)
         v.setContentsMargins(40, 40, 40, 40)
 
-        # Title
-        title = QLabel("Picnic Groups Broadcast Station")
-        title.setStyleSheet("font-size: 32px; font-weight: 700; padding: 20px; color: #2ecc94;")
-        title.setAlignment(Qt.AlignCenter)
-        v.addWidget(title)
-
         subtitle = QLabel("Please log in to continue")
-        subtitle.setStyleSheet("font-size: 18px; color: #555; padding-bottom: 20px;")
+        subtitle.setStyleSheet("font-size: 18px; color: #555; padding-bottom: 10px;")
         subtitle.setAlignment(Qt.AlignCenter)
         v.addWidget(subtitle)
 
@@ -744,6 +743,8 @@ class LoginPage(QWidget):
 
         v_outer = QVBoxLayout()
         v_outer.addStretch()
+        v_outer.addWidget(title)  # Add title above container
+        v_outer.addSpacing(10)
         v_outer.addLayout(h_layout)
         v_outer.addStretch()
 
