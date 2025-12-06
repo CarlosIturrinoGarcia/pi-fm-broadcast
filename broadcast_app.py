@@ -270,12 +270,12 @@ class OnScreenKeyboard(QWidget):
         special_chars = list("!@#$%^&*()-_=+")
 
         g = QVBoxLayout()
-        g.setContentsMargins(8, 6, 8, 8)
-        g.setSpacing(15)  # Increased vertical spacing between rows
+        g.setContentsMargins(4, 3, 4, 4)  # Reduced for smaller screen
+        g.setSpacing(6)  # Reduced vertical spacing for 7" screen
 
         def row_of(chars, prefix_widgets=None, suffix_widgets=None):
             h = QHBoxLayout()
-            h.setSpacing(6)  # Original horizontal spacing
+            h.setSpacing(3)  # Reduced horizontal spacing
             if prefix_widgets:
                 for w in prefix_widgets:
                     h.addWidget(w)
@@ -312,7 +312,7 @@ class OnScreenKeyboard(QWidget):
         enter.clicked.connect(lambda: self._special_key("Enter"))
 
         bottom = QHBoxLayout()
-        bottom.setSpacing(15)  # Increased spacing for bottom row
+        bottom.setSpacing(6)  # Reduced spacing for 7" screen
         bottom.addWidget(hide)
         bottom.addWidget(space, 2)
         bottom.addWidget(enter)
@@ -321,10 +321,10 @@ class OnScreenKeyboard(QWidget):
         self.setLayout(g)
 
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setFixedHeight(320)  # Increased height to accommodate larger spacing
+        self.setFixedHeight(200)  # Reduced height for 7" screen
         self.setStyleSheet("""
-            #OnScreenKeyboard QPushButton { min-width: 36px; min-height: 40px; font-size: 16px; }
-            #OnScreenKeyboard QPushButton[wide="true"] { min-width: 64px; }
+            #OnScreenKeyboard QPushButton { min-width: 26px; min-height: 30px; font-size: 12px; }
+            #OnScreenKeyboard QPushButton[wide="true"] { min-width: 50px; }
         """)
 
     def set_target(self, w: QWidget):
@@ -461,8 +461,8 @@ class WifiDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Wi-Fi Networks")
-        # Make dialog larger to fit screen better
-        self.resize(700, 550)
+        # Optimize size for 7-inch touchscreen
+        self.resize(700, 400)  # Reduced height from 550
 
         # Apply styling to match login page
         self.setStyleSheet("""
@@ -552,7 +552,7 @@ class WifiDialog(QDialog):
         # Password dialog with embedded keyboard
         pwd_dlg = QDialog(self)
         pwd_dlg.setWindowTitle(f"Password for {ssid}")
-        pwd_dlg.resize(700, 550)
+        pwd_dlg.resize(700, 400)  # Reduced for 7-inch screen
 
         # Apply same styling to password dialog
         pwd_dlg.setStyleSheet("""
@@ -607,21 +607,21 @@ class WifiDialog(QDialog):
 
         kb = OnScreenKeyboard(pwd_dlg, target=pwd_input)
         kb.setVisible(True)
-        # Apply login page keyboard styling
+        # Apply login page keyboard styling (smaller for 7" screen)
         kb.setStyleSheet("""
             #OnScreenKeyboard {
                 background: transparent;
-                padding: 8px;
+                padding: 4px;
             }
             #OnScreenKeyboard QPushButton {
-                min-width: 40px;
-                min-height: 45px;
-                font-size: 16px;
+                min-width: 28px;
+                min-height: 32px;
+                font-size: 12px;
                 font-weight: 600;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);
                 color: white;
                 border: 2px solid #6fcaa6;
-                border-radius: 8px;
+                border-radius: 6px;
             }
             #OnScreenKeyboard QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7fdcb7, stop:1 #6fcaa6);
@@ -630,8 +630,8 @@ class WifiDialog(QDialog):
                 background: #5cb892;
             }
             #OnScreenKeyboard QPushButton[wide="true"] {
-                min-width: 120px;
-                font-size: 18px;
+                min-width: 80px;
+                font-size: 13px;
                 font-weight: 700;
             }
         """)
@@ -715,21 +715,21 @@ class LoginPage(QWidget):
         # Title and WiFi button row
         title_row = QHBoxLayout()
 
-        title = QLabel("Picnic Groups Broadcast Station")
-        title.setStyleSheet("font-size: 36px; font-weight: 700; padding: 40px 20px 20px 20px; color: #2ecc94;")
+        title = QLabel("Picnic Groups")
+        title.setStyleSheet("font-size: 20px; font-weight: 700; padding: 8px 10px 8px 10px; color: #2ecc94;")  # Reduced from 36px and padding
         title.setAlignment(Qt.AlignCenter)
 
         # WiFi button
-        self.wifi_btn = QPushButton("WiFi Settings")
-        self.wifi_btn.setFixedSize(150, 50)
+        self.wifi_btn = QPushButton("WiFi")
+        self.wifi_btn.setFixedSize(80, 32)  # Reduced from 150x50
         self.wifi_btn.setStyleSheet("""
             QPushButton {
-                font-size: 14px;
+                font-size: 11px;
                 font-weight: 600;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);
                 color: white;
                 border: 2px solid #6fcaa6;
-                border-radius: 8px;
+                border-radius: 6px;
             }
             QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7fdcb7, stop:1 #6fcaa6);
@@ -744,25 +744,25 @@ class LoginPage(QWidget):
         title_row.addWidget(title)
         title_row.addStretch()
         title_row.addWidget(self.wifi_btn)
-        title_row.setContentsMargins(0, 20, 20, 0)
+        title_row.setContentsMargins(0, 5, 10, 0)  # Reduced margins
 
         # Create a centered container for login form
         container = QWidget()
-        container.setMaximumWidth(600)
+        container.setMaximumWidth(400)  # Reduced from 600
         container.setStyleSheet("""
             QWidget {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f0fdf9, stop:1 #e8f5ef);
                 border: 2px solid #cdeee0;
-                border-radius: 12px;
+                border-radius: 8px;
             }
         """)
 
         v = QVBoxLayout(container)
-        v.setSpacing(20)
-        v.setContentsMargins(40, 40, 40, 40)
+        v.setSpacing(8)  # Reduced from 20
+        v.setContentsMargins(16, 12, 16, 12)  # Reduced from 40
 
-        subtitle = QLabel("Please log in to continue")
-        subtitle.setStyleSheet("font-size: 18px; color: #555; padding-bottom: 10px;")
+        subtitle = QLabel("Please log in")
+        subtitle.setStyleSheet("font-size: 12px; color: #555; padding-bottom: 4px;")  # Reduced font and padding
         subtitle.setAlignment(Qt.AlignCenter)
         v.addWidget(subtitle)
 
@@ -770,21 +770,21 @@ class LoginPage(QWidget):
         self.keyboard = OnScreenKeyboard(self)
         # Keep keyboard always visible on login page for easy access
         self.keyboard.setVisible(True)
-        # Style keyboard buttons to match login button
+        # Style keyboard buttons to match login button (smaller for 7" screen)
         self.keyboard.setStyleSheet("""
             #OnScreenKeyboard {
                 background: transparent;
-                padding: 8px;
+                padding: 4px;
             }
             #OnScreenKeyboard QPushButton {
-                min-width: 40px;
-                min-height: 45px;
-                font-size: 16px;
+                min-width: 28px;
+                min-height: 32px;
+                font-size: 12px;
                 font-weight: 600;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);
                 color: white;
                 border: 2px solid #6fcaa6;
-                border-radius: 8px;
+                border-radius: 6px;
             }
             #OnScreenKeyboard QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7fdcb7, stop:1 #6fcaa6);
@@ -793,8 +793,8 @@ class LoginPage(QWidget):
                 background: #5cb892;
             }
             #OnScreenKeyboard QPushButton[wide="true"] {
-                min-width: 120px;
-                font-size: 18px;
+                min-width: 80px;
+                font-size: 13px;
                 font-weight: 700;
             }
         """)
@@ -811,35 +811,35 @@ class LoginPage(QWidget):
 
         # Form
         form = QFormLayout()
-        form.setSpacing(16)
+        form.setSpacing(6)  # Reduced from 16
         form.setLabelAlignment(Qt.AlignRight)
 
         email_label = QLabel("Email:")
-        email_label.setStyleSheet("font-size: 16px; font-weight: 600; color: #1a1a1a;")
+        email_label.setStyleSheet("font-size: 11px; font-weight: 600; color: #1a1a1a;")  # Reduced font
 
         self.username_input = KeyboardLineEdit(self.keyboard)
-        self.username_input.setPlaceholderText("Enter email address")
-        self.username_input.setMinimumHeight(50)
+        self.username_input.setPlaceholderText("Email")
+        self.username_input.setMinimumHeight(32)  # Reduced from 50
         self.username_input.setStyleSheet("""
-            font-size: 16px;
-            padding: 8px;
+            font-size: 12px;
+            padding: 6px;
             border: 2px solid #cdeee0;
-            border-radius: 8px;
+            border-radius: 6px;
             background-color: white;
         """)
 
         password_label = QLabel("Password:")
-        password_label.setStyleSheet("font-size: 16px; font-weight: 600; color: #1a1a1a;")
+        password_label.setStyleSheet("font-size: 11px; font-weight: 600; color: #1a1a1a;")  # Reduced font
 
         self.password_input = KeyboardLineEdit(self.keyboard)
-        self.password_input.setPlaceholderText("Enter password")
+        self.password_input.setPlaceholderText("Password")
         self.password_input.setEchoMode(QLineEdit.Password)
-        self.password_input.setMinimumHeight(50)
+        self.password_input.setMinimumHeight(32)  # Reduced from 50
         self.password_input.setStyleSheet("""
-            font-size: 16px;
-            padding: 8px;
+            font-size: 12px;
+            padding: 6px;
             border: 2px solid #cdeee0;
-            border-radius: 8px;
+            border-radius: 6px;
             background-color: white;
         """)
         self.password_input.returnPressed.connect(self.validate_login)
@@ -853,10 +853,10 @@ class LoginPage(QWidget):
         self.error_label.setStyleSheet("""
             color: #e74c3c;
             font-weight: 600;
-            font-size: 14px;
-            padding: 12px;
+            font-size: 10px;
+            padding: 6px;
             background-color: #fee;
-            border-radius: 6px;
+            border-radius: 4px;
         """)
         self.error_label.setAlignment(Qt.AlignCenter)
         self.error_label.setVisible(False)
@@ -865,16 +865,16 @@ class LoginPage(QWidget):
 
         # Login button
         self.login_btn = QPushButton("Login")
-        self.login_btn.setMinimumHeight(56)
+        self.login_btn.setMinimumHeight(36)  # Reduced from 56
         self.login_btn.setStyleSheet("""
             QPushButton {
-                font-size: 18px;
+                font-size: 14px;
                 font-weight: 600;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);
                 color: white;
                 border: 2px solid #6fcaa6;
-                border-radius: 12px;
-                padding: 12px;
+                border-radius: 8px;
+                padding: 8px;
             }
             QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7fdcb7, stop:1 #6fcaa6);
@@ -898,17 +898,15 @@ class LoginPage(QWidget):
         h_layout.addStretch()
 
         v_outer = QVBoxLayout()
-        v_outer.addStretch()
         v_outer.addLayout(title_row)  # Add title and WiFi button row
-        v_outer.addSpacing(10)
+        v_outer.addSpacing(3)  # Minimal spacing
         v_outer.addLayout(h_layout)
-        v_outer.addSpacing(20)  # Add spacing between login form and keyboard
+        v_outer.addSpacing(3)  # Minimal spacing between login form and keyboard
 
         main_layout.addLayout(v_outer)
 
         # Add keyboard widget OUTSIDE the centered container so it spans full width
         main_layout.addWidget(self.keyboard)
-        main_layout.addStretch()  # Add stretch at bottom to push keyboard up
 
         # Set background to match app theme
         self.setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafbfa, stop:1 #f0fdf9);")
@@ -2093,12 +2091,13 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.setWindowIcon(self.style().standardIcon(QStyle.SP_ComputerIcon))
 
-        # Start maximized to fit screen properly
-        self.showMaximized()
+        # Set fixed size for 7-inch LCD touchscreen (800x480)
+        self.setFixedSize(800, 480)
+        # Make fullscreen for Raspberry Pi touchscreen
+        self.showFullScreen()
 
         # Settings
         self.settings = QSettings(APP_ORG, APP_NAME)
-        self._restore_geometry()
 
         # Root layout
         central = QWidget()
@@ -2123,25 +2122,25 @@ class MainWindow(QMainWindow):
 
         side_wrap = QWidget()
         side_wrap.setLayout(side)
-        side_wrap.setFixedWidth(200)
+        side_wrap.setFixedWidth(120)  # Reduced from 200 for smaller screen
         side_wrap.setObjectName("Sidebar")
         side_wrap.setStyleSheet(
             "#Sidebar {\n"
             "    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f0fdf9, stop:1 #e8f5ef);\n"
             "    border-right: 2px solid #cdeee0;\n"
-            "    padding: 16px 12px;\n"
+            "    padding: 8px 6px;\n"  # Reduced padding
             "}\n"
             "#Sidebar QPushButton {\n"
-            "    text-align: left;\n"
-            "    padding: 16px 20px;\n"
-            "    min-height: 52px;\n"
-            "    font-size: 16px;\n"
+            "    text-align: center;\n"  # Center text for smaller buttons
+            "    padding: 10px 8px;\n"  # Reduced padding
+            "    min-height: 36px;\n"  # Reduced from 52px
+            "    font-size: 13px;\n"  # Reduced from 16px
             "    font-weight: 600;\n"
-            "    border-radius: 12px;\n"
+            "    border-radius: 8px;\n"  # Reduced from 12px
             "    background: transparent;\n"
             "    color: #1a1a1a;\n"
             "    border: 2px solid transparent;\n"
-            "    margin: 4px 0px;\n"
+            "    margin: 3px 0px;\n"  # Reduced margin
             "}\n"
             "#Sidebar QPushButton:hover {\n"
             "    background: #ffffff;\n"
@@ -2174,8 +2173,8 @@ class MainWindow(QMainWindow):
         # Compose
         root.addWidget(side_wrap)
         content = QVBoxLayout()
-        content.setContentsMargins(24, 24, 24, 24)
-        content.setSpacing(16)
+        content.setContentsMargins(8, 8, 8, 8)  # Reduced from 24 for smaller screen
+        content.setSpacing(8)  # Reduced from 16
         content_wrap = QWidget()
         content_wrap.setLayout(content)
         content_wrap.setObjectName("ContentArea")
