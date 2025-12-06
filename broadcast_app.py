@@ -649,9 +649,21 @@ class LoginPage(QWidget):
                 background: #5cb892;
             }
             #OnScreenKeyboard QPushButton[wide="true"] {
-                min-width: 80px;
+                min-width: 120px;
+                font-size: 18px;
+                font-weight: 700;
             }
         """)
+
+        # Hide the "Hide" button on login page since keyboard should always be visible
+        for i in range(self.keyboard.layout().count()):
+            layout_item = self.keyboard.layout().itemAt(i)
+            if layout_item and layout_item.layout():
+                for j in range(layout_item.layout().count()):
+                    widget = layout_item.layout().itemAt(j).widget()
+                    if widget and isinstance(widget, QPushButton) and widget.text() == "Hide":
+                        widget.setVisible(False)
+                        break
 
         # Form
         form = QFormLayout()
