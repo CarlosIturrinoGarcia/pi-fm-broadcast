@@ -268,7 +268,7 @@ class OnScreenKeyboard(QWidget):
         ]
 
         # Special characters row
-        special_chars = list("!@#$%^&*()-_=+")
+        special_chars = list("!@#$%^&*()-_=+.")
 
         g = QVBoxLayout()
         g.setContentsMargins(4, 3, 4, 4)  # Reduced for smaller screen
