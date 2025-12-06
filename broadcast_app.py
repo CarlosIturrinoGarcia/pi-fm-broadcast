@@ -584,30 +584,41 @@ class KeyboardLineEdit(QLineEdit):
             self._keyboard.setVisible(True)
 
 
-class LoginDialog(QDialog):
-    """Login dialog with username/password authentication."""
+class LoginPage(QWidget):
+    """Integrated login page with username/password authentication."""
+
+    login_successful = pyqtSignal()  # Signal emitted on successful login
 
     def __init__(self, api_client, parent=None):
         super().__init__(parent)
         self.api_client = api_client
-        self.setWindowTitle("FM Broadcast Login")
-        self.setModal(True)
-        # Make dialog larger to fit screen better
-        self.resize(700, 550)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
 
-        # Main layout
-        v = QVBoxLayout(self)
-        v.setSpacing(16)
+        # Main layout with centering
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Create a centered container
+        container = QWidget()
+        container.setMaximumWidth(600)
+        container.setStyleSheet("""
+            QWidget {
+                background-color: white;
+                border-radius: 12px;
+            }
+        """)
+
+        v = QVBoxLayout(container)
+        v.setSpacing(20)
+        v.setContentsMargins(40, 40, 40, 40)
 
         # Title
         title = QLabel("FM Broadcast Dashboard")
-        title.setStyleSheet("font-size: 24px; font-weight: 600; padding: 12px;")
+        title.setStyleSheet("font-size: 32px; font-weight: 700; padding: 20px; color: #2196F3;")
         title.setAlignment(Qt.AlignCenter)
         v.addWidget(title)
 
         subtitle = QLabel("Please log in to continue")
-        subtitle.setStyleSheet("font-size: 14px; color: #666; padding-bottom: 12px;")
+        subtitle.setStyleSheet("font-size: 18px; color: #666; padding-bottom: 20px;")
         subtitle.setAlignment(Qt.AlignCenter)
         v.addWidget(subtitle)
 
@@ -617,46 +628,100 @@ class LoginDialog(QDialog):
 
         # Form
         form = QFormLayout()
-        form.setSpacing(12)
+        form.setSpacing(16)
+        form.setLabelAlignment(Qt.AlignRight)
+
+        email_label = QLabel("Email:")
+        email_label.setStyleSheet("font-size: 16px; font-weight: 600;")
 
         self.username_input = KeyboardLineEdit(self.keyboard)
         self.username_input.setPlaceholderText("Enter email address")
-        self.username_input.setMinimumHeight(44)
-        self.username_input.setStyleSheet("font-size: 16px;")
+        self.username_input.setMinimumHeight(50)
+        self.username_input.setStyleSheet("""
+            font-size: 16px;
+            padding: 8px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+        """)
+
+        password_label = QLabel("Password:")
+        password_label.setStyleSheet("font-size: 16px; font-weight: 600;")
 
         self.password_input = KeyboardLineEdit(self.keyboard)
         self.password_input.setPlaceholderText("Enter password")
         self.password_input.setEchoMode(QLineEdit.Password)
-        self.password_input.setMinimumHeight(44)
-        self.password_input.setStyleSheet("font-size: 16px;")
+        self.password_input.setMinimumHeight(50)
+        self.password_input.setStyleSheet("""
+            font-size: 16px;
+            padding: 8px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+        """)
         self.password_input.returnPressed.connect(self.validate_login)
 
-        form.addRow("Email:", self.username_input)
-        form.addRow("Password:", self.password_input)
+        form.addRow(email_label, self.username_input)
+        form.addRow(password_label, self.password_input)
         v.addLayout(form)
 
         # Error message label
         self.error_label = QLabel("")
-        self.error_label.setStyleSheet("color: #e74c3c; font-weight: 600; padding: 6px;")
+        self.error_label.setStyleSheet("""
+            color: #e74c3c;
+            font-weight: 600;
+            font-size: 14px;
+            padding: 12px;
+            background-color: #fee;
+            border-radius: 6px;
+        """)
         self.error_label.setAlignment(Qt.AlignCenter)
         self.error_label.setVisible(False)
+        self.error_label.setWordWrap(True)
         v.addWidget(self.error_label)
 
         # Add keyboard widget
         v.addWidget(self.keyboard)
 
-        # Buttons
-        btns = QDialogButtonBox()
-        self.login_btn = btns.addButton("Login", QDialogButtonBox.AcceptRole)
-        self.cancel_btn = btns.addButton("Cancel", QDialogButtonBox.RejectRole)
+        # Login button
+        self.login_btn = QPushButton("Login")
+        self.login_btn.setMinimumHeight(56)
+        self.login_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 18px;
+                font-weight: 600;
+                background-color: #2196F3;
+                color: white;
+                border-radius: 8px;
+                padding: 12px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:pressed {
+                background-color: #0D47A1;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        self.login_btn.clicked.connect(self.validate_login)
+        v.addWidget(self.login_btn)
 
-        self.login_btn.setMinimumHeight(44)
-        self.cancel_btn.setMinimumHeight(44)
-        self.cancel_btn.setObjectName("secondary")
+        # Center the container
+        h_layout = QHBoxLayout()
+        h_layout.addStretch()
+        h_layout.addWidget(container)
+        h_layout.addStretch()
 
-        btns.accepted.connect(self.validate_login)
-        btns.rejected.connect(self.reject)
-        v.addWidget(btns)
+        v_outer = QVBoxLayout()
+        v_outer.addStretch()
+        v_outer.addLayout(h_layout)
+        v_outer.addStretch()
+
+        main_layout.addLayout(v_outer)
+
+        # Set background color for the page
+        self.setStyleSheet("background-color: #f5f5f5;")
 
         # Set initial focus
         self.username_input.setFocus(Qt.OtherFocusReason)
@@ -679,7 +744,7 @@ class LoginDialog(QDialog):
 
         # Try local credentials first (fallback for offline mode)
         if self.check_credentials(email, password):
-            self.accept()
+            self.login_successful.emit()
             return
 
         # Disable login button while processing
@@ -689,8 +754,8 @@ class LoginDialog(QDialog):
         try:
             # Attempt API login
             self.api_client.login(email, password)
-            # Success - close dialog
-            self.accept()
+            # Success - emit signal
+            self.login_successful.emit()
 
         except AuthenticationError as e:
             self.failed_attempts += 1
@@ -698,7 +763,7 @@ class LoginDialog(QDialog):
 
             if self.failed_attempts >= self.max_attempts:
                 self.show_error("Too many failed attempts. Access denied.")
-                QTimer.singleShot(2000, self.reject)
+                QTimer.singleShot(2000, lambda: QApplication.instance().quit())
             else:
                 self.show_error(f"Invalid credentials. {remaining} attempts remaining.")
                 self.password_input.clear()
@@ -1192,7 +1257,7 @@ class GroupsPage(QWidget):
 
             # Set the group and navigate
             parent_window.page_messages.set_group(group_id, group_name, frequency)
-            parent_window._goto(1)  # Navigate to messages page
+            parent_window._goto(2)  # Navigate to messages page (index 2 now)
 
     def _start_group_silence_carrier(self, frequency: float, parent_window):
         """Start silence carrier when a group is selected (non-blocking)."""
@@ -1807,7 +1872,7 @@ class MessageListScreen(QWidget):
         # Signal parent to switch page
         parent_window = self.window()
         if hasattr(parent_window, '_goto'):
-            parent_window._goto(0)  # Go to Groups page
+            parent_window._goto(1)  # Go to Groups page (index 1 now)
 
 
 # =============================
@@ -1891,13 +1956,18 @@ class MainWindow(QMainWindow):
             "}"
         )
 
+        # Store sidebar reference for showing/hiding
+        self.side_wrap = side_wrap
+
         # Pages
         self.pages = QStackedWidget()
+        self.page_login = LoginPage(api_client)
         self.page_groups = GroupsPage(api_client)
         self.page_messages = MessageListScreen(api_client)
 
-        self.pages.addWidget(self.page_groups)     # Index 0
-        self.pages.addWidget(self.page_messages)   # Index 1
+        self.pages.addWidget(self.page_login)      # Index 0 (Login)
+        self.pages.addWidget(self.page_groups)     # Index 1 (Groups)
+        self.pages.addWidget(self.page_messages)   # Index 2 (Messages)
 
         # Compose
         root.addWidget(side_wrap)
@@ -1914,14 +1984,43 @@ class MainWindow(QMainWindow):
         root.addWidget(content_wrap, 1)
 
         # Connect signals
-        self.btn_groups.clicked.connect(lambda: self._goto(0))
+        self.btn_groups.clicked.connect(lambda: self._goto(1))  # Groups is now index 1
         self.btn_wifi.clicked.connect(self.open_wifi_dialog)
         self.btn_logout.clicked.connect(self.handle_logout)
+        self.page_login.login_successful.connect(self.on_login_success)
+
+        # Start with login page if not authenticated
+        if not api_client.is_authenticated():
+            self._show_login_page()
+        else:
+            self._show_main_app()
 
         # System tray
         self._setup_tray()
 
         # Check WiFi connection on startup (delayed to ensure window is shown)
+        QTimer.singleShot(500, self._check_wifi_on_startup)
+
+    # ---------- Login/Logout Management ----------
+
+    def _show_login_page(self):
+        """Show login page and hide sidebar."""
+        self.pages.setCurrentIndex(0)  # Login page
+        self.side_wrap.setVisible(False)
+        logger.info("Showing login page")
+
+    def _show_main_app(self):
+        """Show main app with sidebar."""
+        self.side_wrap.setVisible(True)
+        self._goto(1)  # Go to groups page
+        logger.info("Showing main app")
+
+    def on_login_success(self):
+        """Handle successful login."""
+        logger.info("Login successful, switching to main app")
+        self._show_main_app()
+
+        # Check WiFi after login
         QTimer.singleShot(500, self._check_wifi_on_startup)
 
     # ---------- WiFi Connection Check ----------
@@ -2234,7 +2333,8 @@ class MainWindow(QMainWindow):
     def _goto(self, index: int):
         """Navigate to page by index."""
         self.pages.setCurrentIndex(index)
-        self.btn_groups.setChecked(index == 0)
+        # Groups is now at index 1
+        self.btn_groups.setChecked(index == 1)
 
     def handle_logout(self):
         """Handle user logout."""
@@ -2254,44 +2354,22 @@ class MainWindow(QMainWindow):
             # Clear the token
             self.api_client.logout()
 
-            # Disable main window (keep it visible but inactive)
-            self.setEnabled(False)
-            logger.info("Main window disabled for login")
+            # Clear cached data
+            logger.info("Clearing cached data after logout...")
+            self.page_groups._groups_data = []  # Clear cached groups
+            self.page_groups.groups_list.clear()  # Clear UI list
+            self.page_messages.messages_list.clear()
+            self.page_messages.messages_data = []
+            self.page_messages.current_group_id = None
 
-            # Show login dialog again (modal, with main window as parent)
-            login = LoginDialog(self.api_client, self)
-            login.setModal(True)
-            login_result = login.exec_()
+            # Reset login page
+            self.page_login.username_input.clear()
+            self.page_login.password_input.clear()
+            self.page_login.error_label.setVisible(False)
+            self.page_login.failed_attempts = 0
 
-            # Re-enable main window
-            self.setEnabled(True)
-            logger.info("Main window re-enabled")
-
-            if login_result == QDialog.Accepted:
-                logger.info("Login successful, refreshing UI...")
-
-                # Kill all pifm processes before new user session
-                logger.info("Cleaning up pifm processes after login...")
-                kill_all_pifm_processes()
-
-                # Clear cached data
-                logger.info("Clearing cached data after login...")
-                self.page_groups._groups_data = []  # Clear cached groups
-                self.page_groups.groups_list.clear()  # Clear UI list
-                self.page_messages.messages_list.clear()
-                self.page_messages.messages_data = []
-                self.page_messages.current_group_id = None
-
-                # Navigate back to Groups page
-                self._goto(0)
-
-                # Load groups for new user
-                logger.info("Refreshing groups tab after login...")
-                QTimer.singleShot(100, self.page_groups.load_groups)
-            else:
-                # User cancelled, exit application
-                logger.info("Login cancelled, exiting application")
-                QApplication.instance().quit()
+            # Show login page
+            self._show_login_page()
 
     # ---------- System Tray ----------
 
@@ -2414,18 +2492,7 @@ def main():
     # Create API client
     api_client = PicnicAPIClient()
 
-    # Check if user has a valid token (auto-login)
-    if not api_client.is_authenticated():
-        # Show login dialog if no valid token
-        login = LoginDialog(api_client)
-        if login.exec_() != QDialog.Accepted:
-            # User cancelled or failed login
-            sys.exit(0)
-
-    # Fetch Sailing group frequency and set as default
-    sailing_frequency = fetch_sailing_group_frequency(api_client)
-
-    # User authenticated successfully, show main window
+    # Create and show main window (handles login internally)
     w = MainWindow(api_client)
     w.show()
 
