@@ -623,40 +623,10 @@ class LoginPage(QWidget):
         subtitle.setAlignment(Qt.AlignCenter)
         v.addWidget(subtitle)
 
-        # On-screen keyboard (create before inputs)
+        # On-screen keyboard (create before inputs) - same as WiFi keyboard
         self.keyboard = OnScreenKeyboard(self)
         # Keep keyboard always visible on login page for easy access
         self.keyboard.setVisible(True)
-        # Add styling to make keyboard more visible and match app theme
-        self.keyboard.setStyleSheet("""
-            #OnScreenKeyboard {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #f0fdf9, stop:1 #e8f5ef);
-                border-top: 2px solid #cdeee0;
-                padding: 8px;
-            }
-            #OnScreenKeyboard QPushButton {
-                min-width: 40px;
-                min-height: 45px;
-                font-size: 16px;
-                font-weight: 600;
-                background-color: white;
-                border: 2px solid #cdeee0;
-                border-radius: 8px;
-                color: #1a1a1a;
-            }
-            #OnScreenKeyboard QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #e8f5ef, stop:1 #d5ebe0);
-                border-color: #6fcaa6;
-            }
-            #OnScreenKeyboard QPushButton:pressed {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);
-                color: white;
-                border-color: #6fcaa6;
-            }
-            #OnScreenKeyboard QPushButton[wide="true"] {
-                min-width: 80px;
-            }
-        """)
 
         # Form
         form = QFormLayout()
