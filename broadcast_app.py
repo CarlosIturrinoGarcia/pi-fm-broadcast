@@ -1202,22 +1202,20 @@ class GroupsPage(QWidget):
         refresh_layout.addWidget(self.btn_refresh)
         refresh_layout.addStretch()
 
-        # Groups list
-        groups_group = QGroupBox("Groups")
-        groups_layout = QVBoxLayout()
-
+        # Groups list (removed QGroupBox wrapper to fix scrolling)
         self.groups_list = QListWidget()
-        self.groups_list.setMinimumHeight(300)
+        self.groups_list.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.groups_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.groups_list.setStyleSheet("""
             QListWidget {
-                font-size: 16px;
+                font-size: 14px;
                 border: 2px solid #ddd;
                 border-radius: 6px;
             }
             QListWidget::item {
-                padding: 15px;
+                padding: 8px;
                 border-bottom: 1px solid #eee;
-                min-height: 50px;
+                min-height: 40px;
             }
             QListWidget::item:hover {
                 background-color: #e3f2fd;
@@ -1227,11 +1225,25 @@ class GroupsPage(QWidget):
                 color: white;
                 font-weight: 600;
             }
+            QScrollBar:vertical {
+                border: none;
+                background: #f0f0f0;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background: #8df2c9;
+                border-radius: 6px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #7fdcb7;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
         """)
         self.groups_list.itemClicked.connect(self.on_group_selected)
-
-        groups_layout.addWidget(self.groups_list)
-        groups_group.setLayout(groups_layout)
 
         # Group details
         details_group = QGroupBox("Group Details")
@@ -1255,7 +1267,7 @@ class GroupsPage(QWidget):
         lay.addWidget(title)
         lay.addWidget(instruction_label)
         lay.addLayout(refresh_layout)
-        lay.addWidget(groups_group, 1)
+        lay.addWidget(self.groups_list, 1)
         lay.addWidget(details_group, 1)
         lay.addWidget(self.status_label)
 
