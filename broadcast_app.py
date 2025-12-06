@@ -1553,7 +1553,7 @@ class MessageListScreen(QWidget):
 
         self.messages_list = QListWidget()
         self.messages_list.setSelectionMode(QListWidget.MultiSelection)
-        self.messages_list.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.messages_list.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.messages_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.messages_list.setStyleSheet("""
             QListWidget {
