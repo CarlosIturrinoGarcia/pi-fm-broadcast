@@ -271,7 +271,7 @@ class OnScreenKeyboard(QWidget):
 
         g = QVBoxLayout()
         g.setContentsMargins(8, 6, 8, 8)
-        g.setSpacing(12)  # Increased vertical spacing between rows
+        g.setSpacing(15)  # Increased vertical spacing between rows
 
         def row_of(chars, prefix_widgets=None, suffix_widgets=None):
             h = QHBoxLayout()
@@ -312,7 +312,7 @@ class OnScreenKeyboard(QWidget):
         enter.clicked.connect(lambda: self._special_key("Enter"))
 
         bottom = QHBoxLayout()
-        bottom.setSpacing(6)  # Original horizontal spacing
+        bottom.setSpacing(15)  # Increased spacing for bottom row
         bottom.addWidget(hide)
         bottom.addWidget(space, 2)
         bottom.addWidget(enter)
