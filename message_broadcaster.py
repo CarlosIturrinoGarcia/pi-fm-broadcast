@@ -70,6 +70,8 @@ class PicnicMessageBroadcaster:
         self._s3_prefix = s3_prefix.strip() if s3_prefix else "tts/"
         # Strip whitespace from API key
         self._tts_api_key = tts_api_key.strip() if tts_api_key else ""
+        # Track current broadcast process for immediate termination
+        self._current_process = None
 
         logger.info(f"PicnicMessageBroadcaster initialized")
         logger.info(f"  - S3 Bucket: {self._s3_bucket}")
@@ -361,30 +363,39 @@ class PicnicMessageBroadcaster:
                     logger.debug("Waiting 0.3s for /dev/mem to be released")
                     time.sleep(0.3)
 
-                    # Execute without shell=True to prevent command injection
-                    result = subprocess.run(
+                    # Execute using Popen so we can track and kill the process
+                    self._current_process = subprocess.Popen(
                         cmd_args,
                         shell=False,  # CRITICAL: No shell interpretation
-                        capture_output=True,
-                        text=True,
-                        timeout=300  # 5 minute timeout
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True
                     )
 
-                    # Log the actual output to see if broadcast worked
-                    logger.debug(f"Broadcast return code: {result.returncode}")
-                    if result.stdout:
-                        logger.debug(f"Broadcast stdout: {result.stdout}")
-                    if result.stderr:
-                        logger.debug(f"Broadcast stderr: {result.stderr}")
+                    try:
+                        # Wait for completion but allow interruption
+                        stdout, stderr = self._current_process.communicate(timeout=300)
+                        returncode = self._current_process.returncode
 
-                    if result.returncode == 0:
-                        logger.info("FM broadcast completed successfully")
-                        # Removed the 2-second delay after broadcast
-                        # The subprocess.run() already waits for completion
-                    else:
-                        logger.error(f"Broadcast command failed: {result.stderr}")
-                        print(f"DEBUG: Broadcast error: {result.stderr}")
-                        raise TTSBroadcastError(f"Broadcast command failed: {result.stderr}")
+                        # Log the actual output to see if broadcast worked
+                        logger.debug(f"Broadcast return code: {returncode}")
+                        if stdout:
+                            logger.debug(f"Broadcast stdout: {stdout}")
+                        if stderr:
+                            logger.debug(f"Broadcast stderr: {stderr}")
+
+                        if returncode == 0:
+                            logger.info("FM broadcast completed successfully")
+                            # Removed the 2-second delay after broadcast
+                            # The communicate() already waits for completion
+                        else:
+                            logger.error(f"Broadcast command failed: {stderr}")
+                            print(f"DEBUG: Broadcast error: {stderr}")
+                            raise TTSBroadcastError(f"Broadcast command failed: {stderr}")
+
+                    finally:
+                        # Clean up process reference
+                        self._current_process = None
                 else:
                     logger.warning("No FM frequency provided, skipping broadcast")
                     print("DEBUG: No frequency provided, file downloaded but not broadcast")
@@ -414,6 +425,31 @@ class PicnicMessageBroadcaster:
         except Exception as e:
             logger.error(f"Unexpected error during broadcast: {e}")
             raise TTSBroadcastError(f"Broadcast failed: {str(e)}")
+
+    def stop_broadcast(self):
+        """
+        Immediately stop the current broadcast by killing the process.
+
+        This allows the user to interrupt a broadcast in progress.
+        """
+        if self._current_process and self._current_process.poll() is None:
+            logger.info("Stopping broadcast immediately...")
+            try:
+                # Kill the process and all its children
+                self._current_process.kill()
+                # Give it a moment to clean up
+                self._current_process.wait(timeout=1)
+                logger.info("Broadcast process killed successfully")
+            except Exception as e:
+                logger.error(f"Failed to kill broadcast process: {e}")
+            finally:
+                self._current_process = None
+
+            # Also kill all pifm processes to ensure cleanup
+            try:
+                subprocess.run(['sudo', 'pkill', '-9', 'pifm'], capture_output=True, timeout=2)
+            except Exception as e:
+                logger.warning(f"Failed to kill pifm processes: {e}")
 
     def _format_timestamp(self, timestamp_str: str) -> str:
         """

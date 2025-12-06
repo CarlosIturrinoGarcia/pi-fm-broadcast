@@ -1672,7 +1672,21 @@ class MessageListScreen(QWidget):
                         item.setForeground(Qt.darkGreen)
                     success_count += 1
 
+                except subprocess.TimeoutExpired:
+                    # Process was killed (user clicked stop)
+                    logger.info("Broadcast process was terminated")
+                    if loop_iteration == 0:
+                        item.setBackground(Qt.yellow)
+                        item.setForeground(Qt.black)
+                    # Break out of loop immediately
+                    self._stop_requested = True
+                    break
+
                 except TTSBroadcastError as e:
+                    # Check if this was due to process being killed
+                    if self._stop_requested:
+                        logger.info("Broadcast interrupted by user")
+                        break
                     # Visual feedback - red highlight (only on first loop)
                     if loop_iteration == 0:
                         item.setBackground(Qt.red)
@@ -1681,6 +1695,10 @@ class MessageListScreen(QWidget):
                     logger.error(f"Failed to broadcast message {broadcast_number}/{total_messages}: {e}")
 
                 except Exception as e:
+                    # Check if this was due to process being killed
+                    if self._stop_requested:
+                        logger.info("Broadcast interrupted by user")
+                        break
                     if loop_iteration == 0:
                         item.setBackground(Qt.red)
                         item.setForeground(Qt.white)
@@ -1721,12 +1739,23 @@ class MessageListScreen(QWidget):
         self.loop_spinbox.setEnabled(True)
 
     def stop_broadcasting(self):
-        """Stop the current broadcast loop."""
+        """Stop the current broadcast immediately by killing the process."""
         self._stop_requested = True
         self.btn_stop.setEnabled(False)
-        self.status_label.setText("⏹ Stopping broadcast...")
+        self.status_label.setText("⏹ Stopping broadcast immediately...")
         self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #ff9800;")
-        logger.info("User requested stop - will stop after current message completes")
+        logger.info("User requested immediate stop - killing broadcast process")
+
+        # Immediately kill the current broadcast process
+        if self.broadcaster:
+            try:
+                self.broadcaster.stop_broadcast()
+                logger.info("Broadcast stopped successfully")
+            except Exception as e:
+                logger.error(f"Error stopping broadcast: {e}")
+
+        # Also kill all pifm processes as a failsafe
+        kill_all_pifm_processes()
 
     def _on_selection_changed(self):
         """Handle selection change in messages list."""
