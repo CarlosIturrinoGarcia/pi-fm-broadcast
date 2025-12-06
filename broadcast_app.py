@@ -1553,6 +1553,8 @@ class MessageListScreen(QWidget):
 
         self.messages_list = QListWidget()
         self.messages_list.setSelectionMode(QListWidget.MultiSelection)
+        self.messages_list.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.messages_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.messages_list.setStyleSheet("""
             QListWidget {
                 font-size: 16px;
@@ -1571,6 +1573,23 @@ class MessageListScreen(QWidget):
             }
             QListWidget::item:hover {
                 background-color: #f5f5f5;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #f0f0f0;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background: #8df2c9;
+                border-radius: 6px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #7fdcb7;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
             }
         """)
         self.messages_list.setMinimumHeight(400)
