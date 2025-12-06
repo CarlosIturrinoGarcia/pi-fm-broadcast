@@ -678,9 +678,6 @@ class LoginPage(QWidget):
         self.error_label.setWordWrap(True)
         v.addWidget(self.error_label)
 
-        # Add keyboard widget
-        v.addWidget(self.keyboard)
-
         # Login button
         self.login_btn = QPushButton("Login")
         self.login_btn.setMinimumHeight(56)
@@ -719,6 +716,9 @@ class LoginPage(QWidget):
         v_outer.addStretch()
 
         main_layout.addLayout(v_outer)
+
+        # Add keyboard widget OUTSIDE the centered container so it spans full width
+        main_layout.addWidget(self.keyboard)
 
         # Set background color for the page
         self.setStyleSheet("background-color: #f5f5f5;")
