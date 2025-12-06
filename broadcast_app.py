@@ -1228,6 +1228,7 @@ class MessageListScreen(QWidget):
         self.current_group_name = "Unknown Group"
         self.current_frequency = 90.8
         self.messages_data = []
+        self._stop_requested = False  # Flag to interrupt loop
 
         # Main layout
         lay = QVBoxLayout(self)
@@ -1288,6 +1289,33 @@ class MessageListScreen(QWidget):
         self.status_label.setWordWrap(True)
         self.status_label.setAlignment(Qt.AlignCenter)
         lay.addWidget(self.status_label)
+
+        # Loop controls
+        loop_group = QGroupBox("Loop Settings")
+        loop_group.setStyleSheet("QGroupBox { font-size: 16px; font-weight: 600; }")
+        loop_layout = QHBoxLayout()
+
+        loop_label = QLabel("Loop Count:")
+        loop_label.setStyleSheet("font-size: 16px; font-weight: 600;")
+
+        self.loop_spinbox = QDoubleSpinBox()
+        self.loop_spinbox.setRange(1, 10)
+        self.loop_spinbox.setDecimals(0)
+        self.loop_spinbox.setSingleStep(1)
+        self.loop_spinbox.setValue(1)
+        self.loop_spinbox.setMinimumHeight(44)
+        self.loop_spinbox.setMinimumWidth(100)
+        self.loop_spinbox.setStyleSheet("font-size: 16px; font-weight: 600;")
+
+        loop_info = QLabel("(Play selected messages 1-10 times)")
+        loop_info.setStyleSheet("font-size: 14px; color: #666;")
+
+        loop_layout.addWidget(loop_label)
+        loop_layout.addWidget(self.loop_spinbox)
+        loop_layout.addWidget(loop_info)
+        loop_layout.addStretch()
+        loop_group.setLayout(loop_layout)
+        lay.addWidget(loop_group)
 
         # Action buttons
         btn_layout = QHBoxLayout()
@@ -1358,9 +1386,36 @@ class MessageListScreen(QWidget):
         self.btn_broadcast.clicked.connect(self.broadcast_selected)
         self.btn_broadcast.setEnabled(False)
 
+        self.btn_stop = QPushButton("⏹ Stop Broadcasting")
+        self.btn_stop.setMinimumHeight(60)
+        self.btn_stop.setStyleSheet("""
+            QPushButton {
+                font-size: 18px;
+                font-weight: 600;
+                background-color: #FF9800;
+                color: white;
+                border-radius: 8px;
+                padding: 12px 24px;
+            }
+            QPushButton:hover {
+                background-color: #F57C00;
+            }
+            QPushButton:pressed {
+                background-color: #E65100;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        self.btn_stop.clicked.connect(self.stop_broadcasting)
+        self.btn_stop.setEnabled(False)
+        self.btn_stop.setVisible(False)  # Hidden until broadcasting starts
+
         btn_layout.addWidget(self.btn_back)
         btn_layout.addWidget(self.btn_refresh)
         btn_layout.addWidget(self.btn_broadcast, 1)
+        btn_layout.addWidget(self.btn_stop, 1)
         lay.addLayout(btn_layout)
 
         # Connect selection change
@@ -1492,7 +1547,7 @@ class MessageListScreen(QWidget):
             self.btn_refresh.setEnabled(True)
 
     def broadcast_selected(self):
-        """Broadcast selected messages via TTS."""
+        """Broadcast selected messages via TTS with loop support."""
         from message_broadcaster import TTSBroadcastError
 
         selected_items = self.messages_list.selectedItems()
@@ -1511,70 +1566,115 @@ class MessageListScreen(QWidget):
             logger.error("Broadcaster missing broadcast_message method")
             return
 
+        # Get loop count from spinbox
+        loop_count = int(self.loop_spinbox.value())
+        total_messages = len(selected_items) * loop_count
+
         # Kill all pifm processes BEFORE broadcasting to free /dev/mem
         logger.info("Cleaning up pifm processes before message broadcast...")
         kill_all_pifm_processes()
 
-        # Disable buttons during broadcast
+        # Reset stop flag
+        self._stop_requested = False
+
+        # Disable buttons during broadcast, enable stop button
         self.btn_broadcast.setEnabled(False)
         self.btn_refresh.setEnabled(False)
-        self.status_label.setText(f"Broadcasting {len(selected_items)} message(s)...")
+        self.btn_back.setEnabled(False)
+        self.btn_stop.setEnabled(True)
+        self.btn_stop.setVisible(True)
+        self.loop_spinbox.setEnabled(False)
+
+        self.status_label.setText(f"Broadcasting {len(selected_items)} message(s) × {loop_count} loop(s) = {total_messages} total...")
         self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #ff9800;")
         QApplication.processEvents()
 
         success_count = 0
         error_count = 0
+        broadcast_number = 0
 
-        for i, item in enumerate(selected_items):
-            msg = item.data(Qt.UserRole)
-            formatted = self.broadcaster.format_message_for_display(msg)
+        # Loop through messages the specified number of times
+        for loop_iteration in range(loop_count):
+            # Check if stop was requested
+            if self._stop_requested:
+                logger.info(f"Broadcasting stopped by user at loop {loop_iteration + 1}/{loop_count}")
+                self.status_label.setText(f"⏹ Broadcasting stopped: {success_count} succeeded, {error_count} failed")
+                self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #ff9800; font-weight: 600;")
+                break
 
-            try:
-                # Kill all pifm processes before EACH message to ensure /dev/mem is free
-                logger.info(f"Broadcasting message {i+1}/{len(selected_items)}...")
-                if i > 0:
-                    # For messages after the first, kill any leftover processes
-                    logger.info("Ensuring /dev/mem is free before next broadcast...")
-                    kill_all_pifm_processes()
+            for i, item in enumerate(selected_items):
+                # Check if stop was requested before each message
+                if self._stop_requested:
+                    logger.info(f"Broadcasting stopped by user at message {i+1}/{len(selected_items)} in loop {loop_iteration + 1}")
+                    self.status_label.setText(f"⏹ Broadcasting stopped: {success_count} succeeded, {error_count} failed")
+                    self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #ff9800; font-weight: 600;")
+                    break
 
-                # Broadcast the message (this waits for completion)
-                self.broadcaster.broadcast_message(
-                    formatted["message_text"],
-                    formatted["user_name"],
-                    self.current_frequency
+                broadcast_number += 1
+                msg = item.data(Qt.UserRole)
+                formatted = self.broadcaster.format_message_for_display(msg)
+
+                # Update status with current progress
+                self.status_label.setText(
+                    f"Broadcasting {broadcast_number}/{total_messages}: Loop {loop_iteration + 1}/{loop_count}, "
+                    f"Message {i + 1}/{len(selected_items)}"
                 )
+                QApplication.processEvents()
 
-                logger.info(f"Message {i+1}/{len(selected_items)} broadcast successfully")
+                try:
+                    # Kill all pifm processes before EACH message to ensure /dev/mem is free
+                    logger.info(f"Broadcasting message {broadcast_number}/{total_messages} (Loop {loop_iteration + 1}/{loop_count}, Message {i+1}/{len(selected_items)})...")
+                    if broadcast_number > 1:
+                        # For messages after the first, kill any leftover processes
+                        logger.info("Ensuring /dev/mem is free before next broadcast...")
+                        kill_all_pifm_processes()
 
-                # Visual feedback - green highlight
-                item.setBackground(Qt.green)
-                item.setForeground(Qt.darkGreen)
-                success_count += 1
+                    # Broadcast the message (this waits for completion)
+                    self.broadcaster.broadcast_message(
+                        formatted["message_text"],
+                        formatted["user_name"],
+                        self.current_frequency
+                    )
 
-            except TTSBroadcastError as e:
-                # Visual feedback - red highlight
-                item.setBackground(Qt.red)
-                item.setForeground(Qt.white)
-                error_count += 1
-                logger.error(f"Failed to broadcast message {i+1}: {e}")
+                    logger.info(f"Message {broadcast_number}/{total_messages} broadcast successfully")
 
-            except Exception as e:
-                item.setBackground(Qt.red)
-                item.setForeground(Qt.white)
-                error_count += 1
-                logger.error(f"Unexpected error broadcasting message {i+1}: {e}")
+                    # Visual feedback - green highlight (only on first loop)
+                    if loop_iteration == 0:
+                        item.setBackground(Qt.green)
+                        item.setForeground(Qt.darkGreen)
+                    success_count += 1
 
-            QApplication.processEvents()
+                except TTSBroadcastError as e:
+                    # Visual feedback - red highlight (only on first loop)
+                    if loop_iteration == 0:
+                        item.setBackground(Qt.red)
+                        item.setForeground(Qt.white)
+                    error_count += 1
+                    logger.error(f"Failed to broadcast message {broadcast_number}/{total_messages}: {e}")
+
+                except Exception as e:
+                    if loop_iteration == 0:
+                        item.setBackground(Qt.red)
+                        item.setForeground(Qt.white)
+                    error_count += 1
+                    logger.error(f"Unexpected error broadcasting message {broadcast_number}/{total_messages}: {e}")
+
+                QApplication.processEvents()
+
+            # If stopped, break outer loop
+            if self._stop_requested:
+                break
 
         # Update status (no popup dialogs)
-        if error_count == 0:
-            self.status_label.setText(f"✓ Successfully broadcast {success_count} message(s)")
-            self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #2ecc94; font-weight: 600;")
-        else:
-            self.status_label.setText(
-                f"Broadcast complete: {success_count} succeeded, {error_count} failed"
-            )
-            self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #ff9800; font-weight: 600;")
+        if not self._stop_requested:
+            if error_count == 0:
+                self.status_label.setText(f"✓ Successfully broadcast {success_count} message(s) ({loop_count} loop(s))")
+                self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #2ecc94; font-weight: 600;")
+            else:
+                self.status_label.setText(
+                    f"Broadcast complete: {success_count} succeeded, {error_count} failed ({loop_count} loop(s))"
+                )
+                self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #ff9800; font-weight: 600;")
 
         # Automatically kill all pifm processes after broadcast
         logger.info("Automatically killing all pifm processes after broadcast...")
@@ -1584,9 +1684,21 @@ class MessageListScreen(QWidget):
         if success_count > 0:
             self._restart_silence_carrier()
 
-        # Re-enable buttons
+        # Re-enable buttons, hide stop button
         self.btn_broadcast.setEnabled(True)
         self.btn_refresh.setEnabled(True)
+        self.btn_back.setEnabled(True)
+        self.btn_stop.setEnabled(False)
+        self.btn_stop.setVisible(False)
+        self.loop_spinbox.setEnabled(True)
+
+    def stop_broadcasting(self):
+        """Stop the current broadcast loop."""
+        self._stop_requested = True
+        self.btn_stop.setEnabled(False)
+        self.status_label.setText("⏹ Stopping broadcast...")
+        self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #ff9800;")
+        logger.info("User requested stop - will stop after current message completes")
 
     def _on_selection_changed(self):
         """Handle selection change in messages list."""
