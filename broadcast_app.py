@@ -1593,7 +1593,7 @@ class MessageListScreen(QWidget):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(12)
 
-        self.btn_back = QPushButton("← Back")
+        self.btn_back = QPushButton("←")
         self.btn_back.setMinimumHeight(60)
         self.btn_back.setStyleSheet("""
             QPushButton {
@@ -1633,7 +1633,7 @@ class MessageListScreen(QWidget):
         """)
         self.btn_refresh.clicked.connect(self.refresh_messages)
 
-        self.btn_broadcast = QPushButton("📻 Broadcast Selected")
+        self.btn_broadcast = QPushButton("Broadcast")
         self.btn_broadcast.setMinimumHeight(60)
         self.btn_broadcast.setStyleSheet("""
             QPushButton {
@@ -1684,7 +1684,7 @@ class MessageListScreen(QWidget):
         self.btn_stop.setEnabled(False)
         self.btn_stop.setVisible(False)  # Hidden until broadcasting starts
 
-        self.btn_loop_settings = QPushButton("⚙ Loop Settings")
+        self.btn_loop_settings = QPushButton("Loop")
         self.btn_loop_settings.setMinimumHeight(60)
         self.btn_loop_settings.setStyleSheet("""
             QPushButton {
