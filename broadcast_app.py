@@ -291,14 +291,14 @@ class OnScreenKeyboard(QWidget):
         g.addLayout(row_of(rows[1]))
         g.addLayout(row_of(rows[2]))
 
-        self.shift_btn = self._mk_btn("Shift", wide=True)
-        self.shift_btn.setCheckable(True)
-        self.shift_btn.clicked.connect(self._toggle_shift)
+        self.caps_btn = self._mk_btn("Caps", wide=True)
+        self.caps_btn.setCheckable(True)
+        self.caps_btn.clicked.connect(self._toggle_caps)
 
         backspace = self._mk_btn("⌫", wide=True)
         backspace.clicked.connect(lambda: self._special_key("Backspace"))
 
-        g.addLayout(row_of(rows[3], prefix_widgets=[self.shift_btn], suffix_widgets=[backspace]))
+        g.addLayout(row_of(rows[3], prefix_widgets=[self.caps_btn], suffix_widgets=[backspace]))
 
         # Add special characters row
         g.addLayout(row_of(special_chars))
@@ -339,11 +339,11 @@ class OnScreenKeyboard(QWidget):
         b.clicked.connect(lambda checked=False, t=text: self._key_clicked(t))
         return b
 
-    def _toggle_shift(self):
-        self._shift = self.shift_btn.isChecked()
+    def _toggle_caps(self):
+        self._shift = self.caps_btn.isChecked()
 
     def _key_clicked(self, label):
-        if label in ("Shift", "⌫", "Space", "Enter", "Hide"):
+        if label in ("Caps", "⌫", "Space", "Enter", "Hide"):
             return
         ch = label.upper() if (self._shift and label.isalpha()) else label
         self._type_text(ch)
