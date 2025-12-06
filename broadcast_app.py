@@ -321,7 +321,7 @@ class OnScreenKeyboard(QWidget):
         self.setLayout(g)
 
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.setFixedHeight(280)
+        self.setFixedHeight(320)  # Increased height to accommodate larger spacing
         self.setStyleSheet("""
             #OnScreenKeyboard QPushButton { min-width: 36px; min-height: 40px; font-size: 16px; }
             #OnScreenKeyboard QPushButton[wide="true"] { min-width: 64px; }
