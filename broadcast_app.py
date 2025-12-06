@@ -779,7 +779,7 @@ class LoginPage(QWidget):
             }
             #OnScreenKeyboard QPushButton {
                 min-width: 28px;
-                min-height: 28px;
+                min-height: 24px;
                 font-size: 12px;
                 font-weight: 600;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);
