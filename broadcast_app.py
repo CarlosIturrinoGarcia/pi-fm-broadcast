@@ -1613,7 +1613,7 @@ class MessageListScreen(QWidget):
         """)
         self.btn_back.clicked.connect(self.go_back)
 
-        self.btn_refresh = QPushButton("🔄 Refresh Messages")
+        self.btn_refresh = QPushButton("↻")
         self.btn_refresh.setMinimumHeight(60)
         self.btn_refresh.setStyleSheet("""
             QPushButton {
