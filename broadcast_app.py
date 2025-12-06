@@ -1021,14 +1021,14 @@ class GroupsPage(QWidget):
 
             def run(self):
                 try:
-                    # Get groups list - this is the only API call now
+                    # Get groups list
                     groups = self.api_client.get_my_groups()
 
                     if not groups:
                         self.finished_signal.emit([], "")
                         return
 
-                    # Process groups in memory without additional API calls
+                    # Process groups and fetch details if frequency is missing
                     processed_groups = []
                     for group in groups:
                         group_id = (
@@ -1042,10 +1042,20 @@ class GroupsPage(QWidget):
                             logger.warning(f"Group has no ID, skipping")
                             continue
 
-                        # OPTIMIZATION: Don't fetch individual group details
-                        # Use data from get_my_groups which should include frequency
-                        # Only log at debug level to reduce overhead
-                        logger.debug(f"Processing group: {group_id}")
+                        # Check if group already has radio_frequency
+                        if "radio_frequency" not in group or group.get("radio_frequency") is None:
+                            # Fetch full group details to get radio_frequency
+                            try:
+                                logger.debug(f"Fetching details for group {group_id} (missing frequency)")
+                                full_group = self.api_client.get_group_detail(group_id)
+                                if full_group and "radio_frequency" in full_group:
+                                    # Merge frequency into group data
+                                    group["radio_frequency"] = full_group["radio_frequency"]
+                                    logger.debug(f"Got frequency: {full_group['radio_frequency']}")
+                            except Exception as e:
+                                logger.warning(f"Failed to fetch details for group {group_id}: {e}")
+                                # Continue with group even without frequency
+
                         processed_groups.append(group)
 
                     self.finished_signal.emit(processed_groups, "")
