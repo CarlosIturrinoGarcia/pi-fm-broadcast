@@ -272,7 +272,7 @@ class OnScreenKeyboard(QWidget):
 
         g = QVBoxLayout()
         g.setContentsMargins(4, 3, 4, 4)  # Reduced for smaller screen
-        g.setSpacing(6)  # Reduced vertical spacing for 7" screen
+        g.setSpacing(8)  # Vertical spacing between rows
 
         def row_of(chars, prefix_widgets=None, suffix_widgets=None):
             h = QHBoxLayout()
