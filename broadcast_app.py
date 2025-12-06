@@ -775,20 +775,17 @@ class LoginPage(QWidget):
         self.keyboard.setStyleSheet("""
             #OnScreenKeyboard {
                 background: transparent;
-                padding: 3px;
+                padding: 4px;
             }
             #OnScreenKeyboard QPushButton {
-                min-width: 26px;
-                max-width: 28px;
-                min-height: 30px;
-                max-height: 32px;
-                font-size: 11px;
+                min-width: 28px;
+                min-height: 28px;
+                font-size: 12px;
                 font-weight: 600;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);
                 color: white;
-                border: 1px solid #6fcaa6;
-                border-radius: 5px;
-                padding: 3px;
+                border: 2px solid #6fcaa6;
+                border-radius: 6px;
             }
             #OnScreenKeyboard QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7fdcb7, stop:1 #6fcaa6);
@@ -797,9 +794,8 @@ class LoginPage(QWidget):
                 background: #5cb892;
             }
             #OnScreenKeyboard QPushButton[wide="true"] {
-                min-width: 70px;
-                max-width: 75px;
-                font-size: 11px;
+                min-width: 80px;
+                font-size: 13px;
                 font-weight: 700;
             }
         """)
