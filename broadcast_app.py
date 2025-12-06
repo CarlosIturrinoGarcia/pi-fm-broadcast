@@ -624,7 +624,35 @@ class LoginPage(QWidget):
 
         # On-screen keyboard (create before inputs)
         self.keyboard = OnScreenKeyboard(self)
-        self.keyboard.setVisible(False)
+        # Keep keyboard always visible on login page for easy access
+        self.keyboard.setVisible(True)
+        # Add styling to make keyboard more visible
+        self.keyboard.setStyleSheet("""
+            #OnScreenKeyboard {
+                background-color: #ffffff;
+                border-top: 2px solid #ddd;
+                padding: 8px;
+            }
+            #OnScreenKeyboard QPushButton {
+                min-width: 40px;
+                min-height: 45px;
+                font-size: 16px;
+                font-weight: 600;
+                background-color: #f0f0f0;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+            }
+            #OnScreenKeyboard QPushButton:hover {
+                background-color: #e0e0e0;
+            }
+            #OnScreenKeyboard QPushButton:pressed {
+                background-color: #2196F3;
+                color: white;
+            }
+            #OnScreenKeyboard QPushButton[wide="true"] {
+                min-width: 80px;
+            }
+        """)
 
         # Form
         form = QFormLayout()
