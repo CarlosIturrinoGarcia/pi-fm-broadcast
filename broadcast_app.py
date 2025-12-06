@@ -1538,8 +1538,8 @@ class MessageListScreen(QWidget):
         # Group name and frequency display
         self.header_label = QLabel("Group Messages")
         self.header_label.setStyleSheet(
-            "font-size: 24px; font-weight: 600; color: white; "
-            "background-color: #2196F3; padding: 15px; border-radius: 8px;"
+            "font-size: 14px; font-weight: 600; color: white; "
+            "background-color: #2196F3; padding: 8px; border-radius: 6px;"
         )
         self.header_label.setAlignment(Qt.AlignCenter)
 
