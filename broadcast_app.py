@@ -461,42 +461,42 @@ class WifiDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Wi-Fi Networks")
-        # Optimize size for 7-inch touchscreen
-        self.resize(700, 400)  # Reduced height from 550
+        # Fit exactly within 7-inch screen (800x480)
+        self.setFixedSize(780, 460)  # Leave small margin for window decorations
 
-        # Apply styling to match login page
+        # Apply styling to match login page (smaller for 7" screen)
         self.setStyleSheet("""
             QDialog {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafbfa, stop:1 #f0fdf9);
             }
             QLabel {
-                font-size: 16px;
+                font-size: 12px;
                 color: #1a1a1a;
             }
             QListWidget {
                 background: white;
                 border: 2px solid #cdeee0;
-                border-radius: 8px;
-                padding: 8px;
-                font-size: 14px;
+                border-radius: 6px;
+                padding: 4px;
+                font-size: 11px;
             }
             QListWidget::item {
-                padding: 12px;
-                border-radius: 6px;
+                padding: 8px;
+                border-radius: 4px;
             }
             QListWidget::item:selected {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);
                 color: white;
             }
             QPushButton {
-                font-size: 16px;
+                font-size: 13px;
                 font-weight: 600;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);
                 color: white;
                 border: 2px solid #6fcaa6;
-                border-radius: 8px;
-                padding: 10px 20px;
-                min-height: 40px;
+                border-radius: 6px;
+                padding: 8px 12px;
+                min-height: 32px;
             }
             QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7fdcb7, stop:1 #6fcaa6);
@@ -552,7 +552,7 @@ class WifiDialog(QDialog):
         # Password dialog with embedded keyboard
         pwd_dlg = QDialog(self)
         pwd_dlg.setWindowTitle(f"Password for {ssid}")
-        pwd_dlg.resize(700, 400)  # Reduced for 7-inch screen
+        pwd_dlg.setFixedSize(780, 460)  # Fit within 7-inch screen
 
         # Apply same styling to password dialog
         pwd_dlg.setStyleSheet("""
@@ -1585,32 +1585,8 @@ class MessageListScreen(QWidget):
         self.status_label.setAlignment(Qt.AlignCenter)
         lay.addWidget(self.status_label)
 
-        # Loop controls
-        loop_group = QGroupBox("Loop Settings")
-        loop_group.setStyleSheet("QGroupBox { font-size: 16px; font-weight: 600; }")
-        loop_layout = QHBoxLayout()
-
-        loop_label = QLabel("Loop Count:")
-        loop_label.setStyleSheet("font-size: 16px; font-weight: 600;")
-
-        self.loop_spinbox = QDoubleSpinBox()
-        self.loop_spinbox.setRange(1, 10)
-        self.loop_spinbox.setDecimals(0)
-        self.loop_spinbox.setSingleStep(1)
-        self.loop_spinbox.setValue(1)
-        self.loop_spinbox.setMinimumHeight(44)
-        self.loop_spinbox.setMinimumWidth(100)
-        self.loop_spinbox.setStyleSheet("font-size: 16px; font-weight: 600;")
-
-        loop_info = QLabel("(Play selected messages 1-10 times)")
-        loop_info.setStyleSheet("font-size: 14px; color: #666;")
-
-        loop_layout.addWidget(loop_label)
-        loop_layout.addWidget(self.loop_spinbox)
-        loop_layout.addWidget(loop_info)
-        loop_layout.addStretch()
-        loop_group.setLayout(loop_layout)
-        lay.addWidget(loop_group)
+        # Store loop count (will be set via popup)
+        self.loop_count = 1
 
         # Action buttons
         btn_layout = QHBoxLayout()
@@ -1707,8 +1683,29 @@ class MessageListScreen(QWidget):
         self.btn_stop.setEnabled(False)
         self.btn_stop.setVisible(False)  # Hidden until broadcasting starts
 
+        self.btn_loop_settings = QPushButton("⚙ Loop Settings")
+        self.btn_loop_settings.setMinimumHeight(60)
+        self.btn_loop_settings.setStyleSheet("""
+            QPushButton {
+                font-size: 18px;
+                font-weight: 600;
+                background-color: #9C27B0;
+                color: white;
+                border-radius: 8px;
+                padding: 12px 24px;
+            }
+            QPushButton:hover {
+                background-color: #7B1FA2;
+            }
+            QPushButton:pressed {
+                background-color: #6A1B9A;
+            }
+        """)
+        self.btn_loop_settings.clicked.connect(self.open_loop_settings)
+
         btn_layout.addWidget(self.btn_back)
         btn_layout.addWidget(self.btn_refresh)
+        btn_layout.addWidget(self.btn_loop_settings)
         btn_layout.addWidget(self.btn_broadcast, 1)
         btn_layout.addWidget(self.btn_stop, 1)
         lay.addLayout(btn_layout)
@@ -1849,6 +1846,83 @@ class MessageListScreen(QWidget):
         self._messages_worker.finished_signal.connect(on_messages_loaded)
         self._messages_worker.start()
 
+    def open_loop_settings(self):
+        """Open a dialog to configure loop settings."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Loop Settings")
+        dialog.setFixedSize(400, 200)
+        dialog.setStyleSheet("""
+            QDialog {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafbfa, stop:1 #f0fdf9);
+            }
+            QLabel {
+                font-size: 14px;
+                font-weight: 600;
+                color: #1a1a1a;
+            }
+            QSpinBox {
+                font-size: 16px;
+                font-weight: 600;
+                padding: 8px;
+                border: 2px solid #cdeee0;
+                border-radius: 6px;
+                min-height: 40px;
+            }
+            QPushButton {
+                font-size: 14px;
+                font-weight: 600;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);
+                color: white;
+                border: 2px solid #6fcaa6;
+                border-radius: 8px;
+                padding: 10px 20px;
+                min-height: 40px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7fdcb7, stop:1 #6fcaa6);
+            }
+            QPushButton:pressed {
+                background: #5cb892;
+            }
+        """)
+
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(20)
+        layout.setContentsMargins(30, 30, 30, 30)
+
+        # Title
+        title = QLabel("Configure Loop Count")
+        title.setStyleSheet("font-size: 18px; font-weight: 700; color: #2ecc94;")
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
+
+        # Loop count input
+        form = QHBoxLayout()
+        label = QLabel("Loop Count:")
+        spinbox = QSpinBox()
+        spinbox.setRange(1, 10)
+        spinbox.setValue(self.loop_count)
+        spinbox.setMinimumWidth(120)
+
+        info = QLabel("(1-10 times)")
+        info.setStyleSheet("font-size: 12px; color: #666;")
+
+        form.addWidget(label)
+        form.addWidget(spinbox)
+        form.addWidget(info)
+        form.addStretch()
+        layout.addLayout(form)
+
+        # Buttons
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+
+        if dialog.exec_() == QDialog.Accepted:
+            self.loop_count = spinbox.value()
+            logger.info(f"Loop count set to {self.loop_count}")
+
     def broadcast_selected(self):
         """Broadcast selected messages via TTS with loop support."""
         from message_broadcaster import TTSBroadcastError
@@ -1869,8 +1943,8 @@ class MessageListScreen(QWidget):
             logger.error("Broadcaster missing broadcast_message method")
             return
 
-        # Get loop count from spinbox
-        loop_count = int(self.loop_spinbox.value())
+        # Get loop count from stored value
+        loop_count = self.loop_count
         total_messages = len(selected_items) * loop_count
 
         # Kill all pifm processes BEFORE broadcasting to free /dev/mem
