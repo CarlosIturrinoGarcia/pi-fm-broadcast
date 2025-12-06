@@ -758,12 +758,13 @@ class LoginPage(QWidget):
         v_outer.addWidget(title)  # Add title above container
         v_outer.addSpacing(10)
         v_outer.addLayout(h_layout)
-        v_outer.addStretch()
+        v_outer.addSpacing(20)  # Add spacing between login form and keyboard
 
         main_layout.addLayout(v_outer)
 
         # Add keyboard widget OUTSIDE the centered container so it spans full width
         main_layout.addWidget(self.keyboard)
+        main_layout.addStretch()  # Add stretch at bottom to push keyboard up
 
         # Set background to match app theme
         self.setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fafbfa, stop:1 #f0fdf9);")
