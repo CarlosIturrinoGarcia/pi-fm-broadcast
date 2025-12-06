@@ -271,11 +271,11 @@ class OnScreenKeyboard(QWidget):
 
         g = QVBoxLayout()
         g.setContentsMargins(8, 6, 8, 8)
-        g.setSpacing(6)
+        g.setSpacing(10)  # Increased vertical spacing between rows
 
         def row_of(chars, prefix_widgets=None, suffix_widgets=None):
             h = QHBoxLayout()
-            h.setSpacing(6)
+            h.setSpacing(10)  # Increased horizontal spacing between buttons
             if prefix_widgets:
                 for w in prefix_widgets:
                     h.addWidget(w)
@@ -312,7 +312,7 @@ class OnScreenKeyboard(QWidget):
         enter.clicked.connect(lambda: self._special_key("Enter"))
 
         bottom = QHBoxLayout()
-        bottom.setSpacing(6)
+        bottom.setSpacing(10)  # Increased spacing for bottom row
         bottom.addWidget(hide)
         bottom.addWidget(space, 2)
         bottom.addWidget(enter)
@@ -626,21 +626,23 @@ class LoginPage(QWidget):
         self.keyboard = OnScreenKeyboard(self)
         # Keep keyboard always visible on login page for easy access
         self.keyboard.setVisible(True)
-        # Style keyboard buttons to match login button
+        # Style keyboard buttons to match login button - smaller with more spacing
         self.keyboard.setStyleSheet("""
             #OnScreenKeyboard {
                 background: transparent;
                 padding: 8px;
             }
             #OnScreenKeyboard QPushButton {
-                min-width: 40px;
-                min-height: 45px;
-                font-size: 16px;
+                min-width: 32px;
+                max-width: 50px;
+                min-height: 40px;
+                max-height: 40px;
+                font-size: 15px;
                 font-weight: 600;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);
                 color: white;
                 border: 2px solid #6fcaa6;
-                border-radius: 8px;
+                border-radius: 6px;
             }
             #OnScreenKeyboard QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7fdcb7, stop:1 #6fcaa6);
@@ -649,7 +651,8 @@ class LoginPage(QWidget):
                 background: #5cb892;
             }
             #OnScreenKeyboard QPushButton[wide="true"] {
-                min-width: 80px;
+                min-width: 70px;
+                max-width: 100px;
             }
         """)
 
