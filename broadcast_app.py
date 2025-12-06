@@ -73,6 +73,7 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QTextEdit,
     QDoubleSpinBox,
+    QSpinBox,
     QMessageBox,
     QSystemTrayIcon,
     QMenu,
@@ -1960,7 +1961,7 @@ class MessageListScreen(QWidget):
         self.btn_back.setEnabled(False)
         self.btn_stop.setEnabled(True)
         self.btn_stop.setVisible(True)
-        self.loop_spinbox.setEnabled(False)
+        self.btn_loop_settings.setEnabled(False)
 
         self.status_label.setText(f"Broadcasting {len(selected_items)} message(s) × {loop_count} loop(s) = {total_messages} total...")
         self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #ff9800;")
@@ -2085,7 +2086,7 @@ class MessageListScreen(QWidget):
         self.btn_back.setEnabled(True)
         self.btn_stop.setEnabled(False)
         self.btn_stop.setVisible(False)
-        self.loop_spinbox.setEnabled(True)
+        self.btn_loop_settings.setEnabled(True)
 
     def stop_broadcasting(self):
         """Stop the current broadcast immediately by killing the process."""
@@ -2167,8 +2168,8 @@ class MainWindow(QMainWindow):
 
         # Set fixed size for 7-inch LCD touchscreen (800x480)
         self.setFixedSize(800, 480)
-        # Make fullscreen for Raspberry Pi touchscreen
-        self.showFullScreen()
+        # Show window normally with title bar (for debugging)
+        # Can switch to self.showFullScreen() for production if needed
 
         # Settings
         self.settings = QSettings(APP_ORG, APP_NAME)
