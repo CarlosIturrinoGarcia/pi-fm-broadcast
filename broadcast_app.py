@@ -597,10 +597,39 @@ class LoginPage(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Title above the login box
+        # Title and WiFi button row
+        title_row = QHBoxLayout()
+
         title = QLabel("Picnic Groups Broadcast Station")
         title.setStyleSheet("font-size: 36px; font-weight: 700; padding: 40px 20px 20px 20px; color: #2ecc94;")
         title.setAlignment(Qt.AlignCenter)
+
+        # WiFi button
+        self.wifi_btn = QPushButton("WiFi Settings")
+        self.wifi_btn.setFixedSize(150, 50)
+        self.wifi_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 14px;
+                font-weight: 600;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #8df2c9, stop:1 #7fdcb7);
+                color: white;
+                border: 2px solid #6fcaa6;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7fdcb7, stop:1 #6fcaa6);
+            }
+            QPushButton:pressed {
+                background: #5cb892;
+            }
+        """)
+        self.wifi_btn.clicked.connect(self.open_wifi)
+
+        title_row.addStretch()
+        title_row.addWidget(title)
+        title_row.addStretch()
+        title_row.addWidget(self.wifi_btn)
+        title_row.setContentsMargins(0, 20, 20, 0)
 
         # Create a centered container for login form
         container = QWidget()
@@ -755,7 +784,7 @@ class LoginPage(QWidget):
 
         v_outer = QVBoxLayout()
         v_outer.addStretch()
-        v_outer.addWidget(title)  # Add title above container
+        v_outer.addLayout(title_row)  # Add title and WiFi button row
         v_outer.addSpacing(10)
         v_outer.addLayout(h_layout)
         v_outer.addSpacing(20)  # Add spacing between login form and keyboard
@@ -875,6 +904,18 @@ class LoginPage(QWidget):
         """Display error message."""
         self.error_label.setText(message)
         self.error_label.setVisible(True)
+
+    def open_wifi(self):
+        """Open WiFi settings dialog."""
+        from PyQt5.QtWidgets import QDialog
+        # Get the main window (parent's parent)
+        main_window = self.parent()
+        if main_window and hasattr(main_window, 'open_wifi_dialog'):
+            main_window.open_wifi_dialog()
+        else:
+            # Fallback: create dialog directly
+            dlg = WifiDialog(self)
+            dlg.exec_()
 
 
 # =============================
@@ -2035,17 +2076,11 @@ class MainWindow(QMainWindow):
         self.btn_logout.clicked.connect(self.handle_logout)
         self.page_login.login_successful.connect(self.on_login_success)
 
-        # Start with login page if not authenticated
-        if not api_client.is_authenticated():
-            self._show_login_page()
-        else:
-            self._show_main_app()
-
         # System tray
         self._setup_tray()
 
-        # Check WiFi connection on startup (delayed to ensure window is shown)
-        QTimer.singleShot(500, self._check_wifi_on_startup)
+        # Check WiFi connection FIRST before showing login/main app
+        QTimer.singleShot(100, self._check_wifi_and_show_appropriate_page)
 
     # ---------- Login/Logout Management ----------
 
@@ -2071,19 +2106,38 @@ class MainWindow(QMainWindow):
 
     # ---------- WiFi Connection Check ----------
 
-    def _check_wifi_on_startup(self):
-        """Check WiFi connection status on startup and prompt if not connected."""
+    def _check_wifi_and_show_appropriate_page(self):
+        """Check WiFi first, then show login or main app."""
+        # Check WiFi connection - if not connected, automatically open WiFi dialog
         if not self._is_wifi_connected():
-            reply = QMessageBox.question(
+            logger.warning("No WiFi connection detected on startup - opening WiFi settings")
+            # Show a message and open WiFi dialog
+            QMessageBox.warning(
                 self,
                 "WiFi Not Connected",
                 "No active WiFi connection detected.\n\n"
-                "Would you like to configure WiFi now?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes
+                "WiFi settings will open automatically.",
+                QMessageBox.Ok
             )
-            if reply == QMessageBox.Yes:
-                self.open_wifi_dialog()
+            self.open_wifi_dialog()
+
+        # After WiFi check (or if already connected), show appropriate page
+        if not self.api_client.is_authenticated():
+            self._show_login_page()
+        else:
+            self._show_main_app()
+
+    def _check_wifi_on_startup(self):
+        """Check WiFi connection status on startup and prompt if not connected."""
+        if not self._is_wifi_connected():
+            logger.warning("WiFi not connected")
+            QMessageBox.warning(
+                self,
+                "WiFi Not Connected",
+                "No active WiFi connection detected.\n\n"
+                "Please configure WiFi for full functionality.",
+                QMessageBox.Ok
+            )
 
     def _is_wifi_connected(self) -> bool:
         """
