@@ -1546,25 +1546,21 @@ class MessageListScreen(QWidget):
         header_layout.addWidget(self.header_label, 1)
         lay.addLayout(header_layout)
 
-        # Messages list
-        messages_group = QGroupBox("Messages")
-        messages_group.setStyleSheet("QGroupBox { font-size: 18px; font-weight: 600; }")
-        messages_layout = QVBoxLayout()
-
+        # Messages list (removed QGroupBox wrapper to fix scrolling)
         self.messages_list = QListWidget()
         self.messages_list.setSelectionMode(QListWidget.MultiSelection)
         self.messages_list.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.messages_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.messages_list.setStyleSheet("""
             QListWidget {
-                font-size: 16px;
+                font-size: 14px;
                 border: 2px solid #ddd;
                 border-radius: 6px;
             }
             QListWidget::item {
-                padding: 15px;
+                padding: 8px;
                 border-bottom: 1px solid #eee;
-                min-height: 60px;
+                min-height: 40px;
             }
             QListWidget::item:selected {
                 background-color: #e3f2fd;
@@ -1592,11 +1588,7 @@ class MessageListScreen(QWidget):
                 height: 0px;
             }
         """)
-        self.messages_list.setMinimumHeight(400)
-
-        messages_layout.addWidget(self.messages_list)
-        messages_group.setLayout(messages_layout)
-        lay.addWidget(messages_group, 1)
+        lay.addWidget(self.messages_list, 1)
 
         # Status label
         self.status_label = QLabel("Select a group to view messages")
