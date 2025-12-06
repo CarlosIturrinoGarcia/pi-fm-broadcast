@@ -461,7 +461,8 @@ class WifiDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Wi-Fi Networks")
-        self.resize(500, 420)
+        # Make dialog larger to fit screen better
+        self.resize(700, 550)
 
         self.form = QFormLayout(self)
         self.info = QLabel("Scanning nearby Wi-Fi networks…")
@@ -591,7 +592,8 @@ class LoginDialog(QDialog):
         self.api_client = api_client
         self.setWindowTitle("FM Broadcast Login")
         self.setModal(True)
-        self.resize(500, 420)
+        # Make dialog larger to fit screen better
+        self.resize(700, 550)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
 
         # Main layout
@@ -1784,7 +1786,9 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.setWindowIcon(self.style().standardIcon(QStyle.SP_ComputerIcon))
-        self.resize(1000, 700)
+
+        # Start maximized to fit screen properly
+        self.showMaximized()
 
         # Settings
         self.settings = QSettings(APP_ORG, APP_NAME)

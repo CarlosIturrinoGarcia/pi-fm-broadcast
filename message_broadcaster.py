@@ -357,9 +357,9 @@ class PicnicMessageBroadcaster:
                     logger.info("Killing all pifm processes to free /dev/mem")
                     subprocess.run(['sudo', 'pkill', '-9', 'pifm'], capture_output=True)
 
-                    # Wait for the resource to be released
-                    logger.info("Waiting 1 second for /dev/mem to be released")
-                    time.sleep(1)
+                    # Reduced wait time for /dev/mem release (0.3s instead of 1s)
+                    logger.debug("Waiting 0.3s for /dev/mem to be released")
+                    time.sleep(0.3)
 
                     # Execute without shell=True to prevent command injection
                     result = subprocess.run(
@@ -371,17 +371,16 @@ class PicnicMessageBroadcaster:
                     )
 
                     # Log the actual output to see if broadcast worked
-                    logger.info(f"Broadcast return code: {result.returncode}")
-                    logger.info(f"Broadcast stdout: {result.stdout}")
-                    logger.info(f"Broadcast stderr: {result.stderr}")
+                    logger.debug(f"Broadcast return code: {result.returncode}")
+                    if result.stdout:
+                        logger.debug(f"Broadcast stdout: {result.stdout}")
+                    if result.stderr:
+                        logger.debug(f"Broadcast stderr: {result.stderr}")
 
                     if result.returncode == 0:
                         logger.info("FM broadcast completed successfully")
-                        print("DEBUG: Broadcast complete!")
-
-                        # Wait for the broadcast to complete before returning
-                        logger.info("Waiting 2 seconds for broadcast to complete")
-                        time.sleep(2)
+                        # Removed the 2-second delay after broadcast
+                        # The subprocess.run() already waits for completion
                     else:
                         logger.error(f"Broadcast command failed: {result.stderr}")
                         print(f"DEBUG: Broadcast error: {result.stderr}")
