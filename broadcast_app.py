@@ -28,9 +28,9 @@ import logging
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-# Configure logging
+# Configure logging - use INFO level for better performance
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,  # Changed from DEBUG for performance
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout)
@@ -101,33 +101,29 @@ def kill_all_pifm_processes():
 
     This is critical when switching users or starting new broadcasts
     to ensure /dev/mem is released and no conflicts occur.
+
+    Optimized to reduce subprocess overhead.
     """
     import time
 
     try:
-        logger.info("Killing all pifm processes...")
+        logger.debug("Killing all pifm processes...")
 
-        # Kill all pifm processes
+        # Combine pkill commands into single call for better performance
+        # Use ; to run both commands even if first fails
         subprocess.run(
-            ["sudo", "pkill", "-9", "pifm"],
+            ["sudo", "sh", "-c", "pkill -9 pifm; pkill -9 pifm_broadcast"],
             capture_output=True,
-            timeout=5
+            timeout=3  # Reduced timeout from 5s to 3s
         )
 
-        # Also kill any pifm_broadcast.sh processes
-        subprocess.run(
-            ["sudo", "pkill", "-9", "pifm_broadcast"],
-            capture_output=True,
-            timeout=5
-        )
+        # Reduced sleep time from 1.0s to 0.5s for better responsiveness
+        time.sleep(0.5)
 
-        # Wait longer to ensure /dev/mem is fully released
-        time.sleep(1.0)
-
-        logger.info("All pifm processes killed")
+        logger.debug("All pifm processes killed")
 
     except subprocess.TimeoutExpired:
-        logger.error("Timeout killing pifm processes")
+        logger.warning("Timeout killing pifm processes")
     except FileNotFoundError:
         logger.warning("pkill command not found")
     except Exception as e:
@@ -1006,111 +1002,128 @@ class GroupsPage(QWidget):
             self.load_groups()
 
     def load_groups(self):
-        """Load groups from the API."""
+        """Load groups from the API using background worker for better performance."""
         from api_client import TokenExpiredError, NetworkError, PicnicAPIError
 
         self.status_label.setText("Loading groups...")
         self.status_label.setStyleSheet("color: #3498db;")
         self.btn_refresh.setEnabled(False)
-        QApplication.processEvents()  # Update UI immediately
 
-        try:
-            # First, get the list of groups
-            groups = self.api_client.get_my_groups()
+        # Use QThread to avoid blocking UI
+        class GroupsLoader(QThread):
+            finished_signal = pyqtSignal(list, str)  # (groups, error_message)
 
-            if not groups:
-                self.status_label.setText("No groups found.")
-                self.status_label.setStyleSheet("color: #95a5a6;")
-                return
+            def __init__(self, api_client):
+                super().__init__()
+                self.api_client = api_client
 
-            # Clear the list
-            self.groups_list.clear()
-            self._groups_data = []
-
-            # For each group, fetch full details to get radio_frequency
-            for group in groups:
-                # Get group ID
-                group_id = (
-                    group.get("id") or
-                    group.get("_id") or
-                    group.get("group_id") or
-                    group.get("event_id")
-                )
-
-                logger.info(f"Processing group from list: {json.dumps(group, indent=2)}")
-
-                if not group_id:
-                    logger.warning(f"Group has no ID, skipping: {group}")
-                    continue
-
-                # Fetch full group details to get radio_frequency
+            def run(self):
                 try:
-                    logger.info(f"Fetching full details for group ID: {group_id}")
-                    full_group = self.api_client.get_group_detail(group_id)
-                    if full_group:
-                        logger.info(f"Full group details received: {json.dumps(full_group, indent=2)}")
-                        # Use full group data which includes radio_frequency
-                        group = full_group
-                    else:
-                        logger.warning(f"get_group_detail returned None for {group_id}")
+                    # Get groups list - this is the only API call now
+                    groups = self.api_client.get_my_groups()
+
+                    if not groups:
+                        self.finished_signal.emit([], "")
+                        return
+
+                    # Process groups in memory without additional API calls
+                    processed_groups = []
+                    for group in groups:
+                        group_id = (
+                            group.get("id") or
+                            group.get("_id") or
+                            group.get("group_id") or
+                            group.get("event_id")
+                        )
+
+                        if not group_id:
+                            logger.warning(f"Group has no ID, skipping")
+                            continue
+
+                        # OPTIMIZATION: Don't fetch individual group details
+                        # Use data from get_my_groups which should include frequency
+                        # Only log at debug level to reduce overhead
+                        logger.debug(f"Processing group: {group_id}")
+                        processed_groups.append(group)
+
+                    self.finished_signal.emit(processed_groups, "")
+
+                except TokenExpiredError as e:
+                    self.finished_signal.emit([], f"session_expired:{str(e)}")
+                except NetworkError as e:
+                    self.finished_signal.emit([], f"network_error:{str(e)}")
                 except Exception as e:
-                    logger.error(f"Failed to fetch details for group {group_id}: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    # Continue with basic group data
+                    self.finished_signal.emit([], f"error:{str(e)}")
 
-                # Store the group data
-                self._groups_data.append(group)
+        def on_groups_loaded(groups, error_msg):
+            """Handle groups loaded from background thread."""
+            try:
+                if error_msg:
+                    if error_msg.startswith("session_expired:"):
+                        msg = error_msg.replace("session_expired:", "")
+                        self.status_label.setText(f"Session expired: {msg}")
+                        self.status_label.setStyleSheet("color: #e74c3c;")
+                        QMessageBox.warning(self, "Session Expired", "Your session has expired. Please login again.")
+                    elif error_msg.startswith("network_error:"):
+                        msg = error_msg.replace("network_error:", "")
+                        self.status_label.setText(f"Network error: {msg}")
+                        self.status_label.setStyleSheet("color: #e74c3c;")
+                    else:
+                        msg = error_msg.replace("error:", "")
+                        self.status_label.setText(f"Error: {msg}")
+                        self.status_label.setStyleSheet("color: #e74c3c;")
+                    return
 
-                # Display group name or ID
-                group_name = group.get("name", group.get("id", "Unknown Group"))
-                logger.info(f"Group name: '{group_name}'")
+                if not groups:
+                    self.status_label.setText("No groups found.")
+                    self.status_label.setStyleSheet("color: #95a5a6;")
+                    return
 
-                # Get frequency from group data
-                frequency = group.get("radio_frequency")
-                logger.info(f"Radio frequency for '{group_name}': {frequency}")
+                # Clear and populate list (fast UI operations)
+                self.groups_list.clear()
+                self._groups_data = []
 
-                # Format display text with frequency if available
-                if frequency:
-                    try:
-                        freq_float = float(frequency)
-                        display_text = f"{group_name}  •  {freq_float:.1f} MHz"
-                        logger.info(f"Group '{group_name}' has frequency: {freq_float:.1f} MHz")
-                    except (ValueError, TypeError):
-                        display_text = f"{group_name}  •  {frequency} MHz"
-                        logger.warning(f"Group '{group_name}' has invalid frequency: {frequency}")
-                else:
-                    display_text = f"{group_name}  •  No frequency"
-                    logger.info(f"Group '{group_name}' has no radio_frequency field")
+                # Batch UI updates for better performance
+                self.groups_list.setUpdatesEnabled(False)
+                try:
+                    for group in groups:
+                        self._groups_data.append(group)
 
-                item = QListWidgetItem(display_text)
-                item.setData(Qt.UserRole, group)  # Store full group data
-                self.groups_list.addItem(item)
+                        # Display group name or ID
+                        group_name = group.get("name", group.get("id", "Unknown Group"))
 
-            self.status_label.setText(f"Loaded {len(self._groups_data)} group(s) successfully.")
-            self.status_label.setStyleSheet("color: #2ecc94;")
+                        # Get frequency from group data
+                        frequency = group.get("radio_frequency")
 
-        except TokenExpiredError as e:
-            self.status_label.setText(f"Session expired: {str(e)}")
-            self.status_label.setStyleSheet("color: #e74c3c;")
-            # Emit signal to show login dialog
-            QMessageBox.warning(self, "Session Expired", "Your session has expired. Please login again.")
-            # Parent should handle re-login
+                        # Format display text with frequency if available
+                        if frequency:
+                            try:
+                                freq_float = float(frequency)
+                                display_text = f"{group_name}  •  {freq_float:.1f} MHz"
+                            except (ValueError, TypeError):
+                                display_text = f"{group_name}  •  {frequency} MHz"
+                        else:
+                            display_text = f"{group_name}  •  No frequency"
 
-        except NetworkError as e:
-            self.status_label.setText(f"Network error: {str(e)}")
-            self.status_label.setStyleSheet("color: #e74c3c;")
+                        item = QListWidgetItem(display_text)
+                        item.setData(Qt.UserRole, group)
+                        self.groups_list.addItem(item)
+                finally:
+                    self.groups_list.setUpdatesEnabled(True)
 
-        except PicnicAPIError as e:
-            self.status_label.setText(f"API error: {str(e)}")
-            self.status_label.setStyleSheet("color: #e74c3c;")
+                self.status_label.setText(f"Loaded {len(self._groups_data)} group(s) successfully.")
+                self.status_label.setStyleSheet("color: #2ecc94;")
 
-        except Exception as e:
-            self.status_label.setText(f"Unexpected error: {str(e)}")
-            self.status_label.setStyleSheet("color: #e74c3c;")
+            finally:
+                self.btn_refresh.setEnabled(True)
+                # Clean up worker
+                if hasattr(self, '_groups_worker'):
+                    self._groups_worker.deleteLater()
 
-        finally:
-            self.btn_refresh.setEnabled(True)
+        # Start background loading
+        self._groups_worker = GroupsLoader(self.api_client)
+        self._groups_worker.finished_signal.connect(on_groups_loaded)
+        self._groups_worker.start()
 
     def on_group_selected(self, item):
         """Navigate directly to message list screen when a group is clicked."""
@@ -1170,45 +1183,50 @@ class GroupsPage(QWidget):
             parent_window._goto(1)  # Navigate to messages page
 
     def _start_group_silence_carrier(self, frequency: float, parent_window):
-        """Start silence carrier when a group is selected."""
-        try:
-            if not hasattr(parent_window, '_start_silence_carrier'):
-                logger.warning("Parent window does not have _start_silence_carrier method")
-                return
+        """Start silence carrier when a group is selected (non-blocking)."""
+        # Use QTimer to defer heavy work, keeping UI responsive
+        def start_carrier_async():
+            try:
+                if not hasattr(parent_window, '_start_silence_carrier'):
+                    logger.warning("Parent window does not have _start_silence_carrier method")
+                    return
 
-            # Kill all existing pifm processes first
-            logger.info("Cleaning up pifm processes before starting group silence carrier...")
-            kill_all_pifm_processes()
+                # Kill all existing pifm processes first
+                logger.info("Cleaning up pifm processes before starting group silence carrier...")
+                kill_all_pifm_processes()
 
-            # Get environment variables
-            env_vars = load_env_file(ENV_PATH)
+                # Get environment variables
+                env_vars = load_env_file(ENV_PATH)
 
-            # Update BROADCAST_CMD with the group's frequency
-            broadcast_cmd_template = env_vars.get(
-                "BROADCAST_CMD",
-                "/usr/bin/sudo /usr/local/bin/pifm_broadcast.sh {file} -f {freq}"
-            )
-            new_broadcast_cmd = render_broadcast_cmd(broadcast_cmd_template, frequency)
+                # Update BROADCAST_CMD with the group's frequency
+                broadcast_cmd_template = env_vars.get(
+                    "BROADCAST_CMD",
+                    "/usr/bin/sudo /usr/local/bin/pifm_broadcast.sh {file} -f {freq}"
+                )
+                new_broadcast_cmd = render_broadcast_cmd(broadcast_cmd_template, frequency)
 
-            # Write the updated BROADCAST_CMD to the env file
-            write_env_key(ENV_PATH, "BROADCAST_CMD", new_broadcast_cmd)
-            logger.info(f"Updated BROADCAST_CMD to frequency {frequency:.1f} MHz: {new_broadcast_cmd}")
+                # Write the updated BROADCAST_CMD to the env file
+                write_env_key(ENV_PATH, "BROADCAST_CMD", new_broadcast_cmd)
+                logger.info(f"Updated BROADCAST_CMD to frequency {frequency:.1f} MHz")
 
-            # Update env_vars dict for immediate use
-            env_vars["BROADCAST_CMD"] = new_broadcast_cmd
+                # Update env_vars dict for immediate use
+                env_vars["BROADCAST_CMD"] = new_broadcast_cmd
 
-            # Start silence carrier on group's frequency
-            logger.info(f"Starting silence carrier for group on {frequency:.1f} MHz")
-            parent_window._start_silence_carrier(frequency, env_vars)
+                # Start silence carrier on group's frequency
+                logger.info(f"Starting silence carrier for group on {frequency:.1f} MHz")
+                parent_window._start_silence_carrier(frequency, env_vars)
 
-            # Update status
-            self.status_label.setText(f"✓ Broadcasting silence carrier on {frequency:.1f} MHz")
-            self.status_label.setStyleSheet("color: #2ecc94;")
+                # Update status
+                self.status_label.setText(f"✓ Broadcasting silence carrier on {frequency:.1f} MHz")
+                self.status_label.setStyleSheet("color: #2ecc94;")
 
-        except Exception as e:
-            logger.error(f"Failed to start group silence carrier: {e}")
-            self.status_label.setText(f"Warning: Could not start silence carrier - {e}")
-            self.status_label.setStyleSheet("color: #ff9800;")
+            except Exception as e:
+                logger.error(f"Failed to start group silence carrier: {e}")
+                self.status_label.setText(f"Warning: Could not start silence carrier - {e}")
+                self.status_label.setStyleSheet("color: #ff9800;")
+
+        # Defer to next event loop iteration for better responsiveness
+        QTimer.singleShot(0, start_carrier_async)
 
     def view_group_messages(self):
         """Navigate to message list screen for selected group (button handler)."""
@@ -1462,7 +1480,7 @@ class MessageListScreen(QWidget):
         self.refresh_messages()
 
     def refresh_messages(self):
-        """Refresh messages from the API."""
+        """Refresh messages from the API using background thread."""
         from message_broadcaster import MessageFetchError
         import traceback
 
@@ -1476,75 +1494,83 @@ class MessageListScreen(QWidget):
             self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #e74c3c;")
             return
 
-        self.status_label.setText(f"Loading messages for group {self.current_group_id}...")
+        self.status_label.setText(f"Loading messages...")
         self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #3498db;")
         self.btn_refresh.setEnabled(False)
-        QApplication.processEvents()
 
-        try:
-            print(f"\n=== FETCHING MESSAGES ===")
-            print(f"Group ID: {self.current_group_id}")
-            print(f"Group Name: {self.current_group_name}")
+        # Use QThread for non-blocking message loading
+        class MessagesLoader(QThread):
+            finished_signal = pyqtSignal(list, str)  # (messages, error_message)
 
-            # Fetch messages
-            messages = self.broadcaster.get_group_messages(self.current_group_id, limit=50)
-            self.messages_data = messages
+            def __init__(self, broadcaster, group_id):
+                super().__init__()
+                self.broadcaster = broadcaster
+                self.group_id = group_id
 
-            print(f"Received {len(messages)} messages")
+            def run(self):
+                try:
+                    logger.debug(f"Fetching messages for group {self.group_id}")
+                    messages = self.broadcaster.get_group_messages(self.group_id, limit=50)
+                    self.finished_signal.emit(messages, "")
+                except MessageFetchError as e:
+                    self.finished_signal.emit([], f"fetch_error:{str(e)}")
+                except Exception as e:
+                    self.finished_signal.emit([], f"error:{str(e)}")
 
-            # Clear and populate list
-            self.messages_list.clear()
+        def on_messages_loaded(messages, error_msg):
+            """Handle messages loaded from background thread."""
+            try:
+                if error_msg:
+                    if error_msg.startswith("fetch_error:"):
+                        msg = error_msg.replace("fetch_error:", "")
+                        self.status_label.setText(f"Error: {msg}")
+                        self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #e74c3c;")
+                        QMessageBox.critical(self, "Failed to Load Messages", f"Could not load messages.\n\n{msg}")
+                    else:
+                        msg = error_msg.replace("error:", "")
+                        self.status_label.setText(f"Unexpected error: {msg}")
+                        self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #e74c3c;")
+                        QMessageBox.critical(self, "Error", f"Unexpected error loading messages.\n\n{msg}")
+                    return
 
-            if not messages:
-                self.status_label.setText("No text messages found in this group")
-                self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #95a5a6;")
-                print("No messages to display")
-                return
+                self.messages_data = messages
 
-            # Add messages to list
-            for i, msg in enumerate(messages):
-                print(f"\nMessage {i+1}: {msg.get('message', '')[:50]}...")
-                formatted = self.broadcaster.format_message_for_display(msg)
-                display_text = formatted["display_text"]
+                if not messages:
+                    self.status_label.setText("No text messages found in this group")
+                    self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #95a5a6;")
+                    self.messages_list.clear()
+                    return
 
-                item = QListWidgetItem(display_text)
-                item.setData(Qt.UserRole, msg)  # Store original message data
-                self.messages_list.addItem(item)
+                # Batch UI updates for performance
+                self.messages_list.setUpdatesEnabled(False)
+                try:
+                    self.messages_list.clear()
 
-            self.status_label.setText(f"✓ Loaded {len(messages)} message(s) successfully")
-            self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #2ecc94;")
-            print(f"Successfully displayed {len(messages)} messages")
+                    # Add messages to list
+                    for msg in messages:
+                        formatted = self.broadcaster.format_message_for_display(msg)
+                        display_text = formatted["display_text"]
 
-        except MessageFetchError as e:
-            error_msg = str(e)
-            self.status_label.setText(f"Error: {error_msg}")
-            self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #e74c3c;")
-            print(f"MessageFetchError: {error_msg}")
-            traceback.print_exc()
+                        item = QListWidgetItem(display_text)
+                        item.setData(Qt.UserRole, msg)
+                        self.messages_list.addItem(item)
+                finally:
+                    self.messages_list.setUpdatesEnabled(True)
 
-            # Show detailed error dialog
-            QMessageBox.critical(
-                self,
-                "Failed to Load Messages",
-                f"Could not load messages from group.\n\n{error_msg}\n\nCheck the console for details."
-            )
+                self.status_label.setText(f"✓ Loaded {len(messages)} message(s) successfully")
+                self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #2ecc94;")
+                logger.debug(f"Successfully displayed {len(messages)} messages")
 
-        except Exception as e:
-            error_msg = str(e)
-            self.status_label.setText(f"Unexpected error: {error_msg}")
-            self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #e74c3c;")
-            print(f"Unexpected error: {error_msg}")
-            traceback.print_exc()
+            finally:
+                self.btn_refresh.setEnabled(True)
+                # Clean up worker
+                if hasattr(self, '_messages_worker'):
+                    self._messages_worker.deleteLater()
 
-            # Show detailed error dialog
-            QMessageBox.critical(
-                self,
-                "Error",
-                f"Unexpected error loading messages.\n\n{error_msg}\n\nCheck the console for details."
-            )
-
-        finally:
-            self.btn_refresh.setEnabled(True)
+        # Start background loading
+        self._messages_worker = MessagesLoader(self.broadcaster, self.current_group_id)
+        self._messages_worker.finished_signal.connect(on_messages_loaded)
+        self._messages_worker.start()
 
     def broadcast_selected(self):
         """Broadcast selected messages via TTS with loop support."""
