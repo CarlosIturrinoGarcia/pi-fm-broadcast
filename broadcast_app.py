@@ -58,7 +58,7 @@ from PyQt5.QtCore import (
     QProcess,
     QTimer,
 )
-from PyQt5.QtGui import QIcon, QKeyEvent
+from PyQt5.QtGui import QIcon, QKeyEvent, QKeySequence
 from PyQt5.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -85,6 +85,7 @@ from PyQt5.QtWidgets import (
     QCheckBox,
     QGroupBox,
     QGridLayout,
+    QShortcut,
 )
 
 APP_ORG = "PiFmBroadcast"
@@ -2213,14 +2214,10 @@ class MainWindow(QMainWindow):
         side.addWidget(self.btn_wifi)
         side.addStretch(1)
 
-        # Logout and Quit buttons at bottom
+        # Logout button at bottom
         self.btn_logout = QPushButton("Logout")
         self.btn_logout.setObjectName("logout")
         side.addWidget(self.btn_logout)
-
-        self.btn_quit = QPushButton("Quit")
-        self.btn_quit.setObjectName("quit")
-        side.addWidget(self.btn_quit)
 
         side_wrap = QWidget()
         side_wrap.setLayout(side)
@@ -2290,8 +2287,11 @@ class MainWindow(QMainWindow):
         self.btn_groups.clicked.connect(lambda: self._goto(1))  # Groups is now index 1
         self.btn_wifi.clicked.connect(self.open_wifi_dialog)
         self.btn_logout.clicked.connect(self.handle_logout)
-        self.btn_quit.clicked.connect(QApplication.quit)
         self.page_login.login_successful.connect(self.on_login_success)
+
+        # Keyboard shortcuts
+        self.quit_shortcut = QShortcut(QKeySequence("Ctrl+Q"), self)
+        self.quit_shortcut.activated.connect(QApplication.quit)
 
         # System tray
         self._setup_tray()
