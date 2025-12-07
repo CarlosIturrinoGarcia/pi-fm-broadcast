@@ -295,7 +295,7 @@ class OnScreenKeyboard(QWidget):
         self.caps_btn.setCheckable(True)
         self.caps_btn.clicked.connect(self._toggle_caps)
 
-        backspace = self._mk_btn("⌫", wide=True)
+        backspace = self._mk_btn("Del", wide=True)
         backspace.clicked.connect(lambda: self._special_key("Backspace"))
 
         g.addLayout(row_of(rows[3], prefix_widgets=[self.caps_btn], suffix_widgets=[backspace]))
@@ -343,7 +343,7 @@ class OnScreenKeyboard(QWidget):
         self._shift = self.caps_btn.isChecked()
 
     def _key_clicked(self, label):
-        if label in ("Caps", "⌫", "Space", "Enter", "Hide"):
+        if label in ("Caps", "Del", "Space", "Enter", "Hide"):
             return
         ch = label.upper() if (self._shift and label.isalpha()) else label
         self._type_text(ch)
@@ -513,7 +513,7 @@ class WifiDialog(QDialog):
         """)
 
         self.form = QFormLayout(self)
-        self.info = QLabel("Scanning nearby Wi-Fi networks…")
+        self.info = QLabel("Scanning nearby Wi-Fi networks...")
         self.form.addRow(self.info)
 
         self.list_widget = QListWidget()
@@ -533,7 +533,7 @@ class WifiDialog(QDialog):
         self.scan()
 
     def scan(self):
-        self.info.setText("Scanning nearby Wi-Fi networks…")
+        self.info.setText("Scanning nearby Wi-Fi networks...")
         self.list_widget.clear()
         self.connect_btn.setEnabled(False)
         self.worker = WifiWorker("scan")
@@ -653,7 +653,7 @@ class WifiDialog(QDialog):
             QMessageBox.warning(self, "Wi-Fi", "Password cannot be empty.")
             return
 
-        self.info.setText(f"Connecting to {ssid} …")
+        self.info.setText(f"Connecting to {ssid} ...")
         self.connect_btn.setEnabled(False)
         self.worker = WifiWorker("connect", ssid=ssid, password=password)
         self.worker.finished.connect(self._on_finished)
@@ -668,7 +668,7 @@ class WifiDialog(QDialog):
             self.info.setText(f"Found {len(nets)} network(s). Select one to connect.")
             for net in nets:
                 ssid = net.get("ssid") or "<hidden>"
-                text = f"{ssid}  —  Signal: {net.get('signal','')}  —  Security: {net.get('security','')}"
+                text = f"{ssid} -Signal: {net.get('signal','')} -Security: {net.get('security','')}"
                 it = QListWidgetItem(text)
                 it.setData(Qt.UserRole, net)
                 self.list_widget.addItem(it)
@@ -1134,7 +1134,7 @@ class DashboardPage(QWidget):
 
         self.log = QTextEdit()
         self.log.setReadOnly(True)
-        self.log.setPlaceholderText("Service output will appear here…")
+        self.log.setPlaceholderText("Service output will appear here...")
         self.log.setMinimumHeight(200)
 
         log_controls = QHBoxLayout()
@@ -1187,7 +1187,7 @@ class GroupsPage(QWidget):
         title.setStyleSheet("font-size: 22px; font-weight: 600;")
 
         # Instruction label
-        instruction_label = QLabel("📻 Click a group to view and broadcast messages")
+        instruction_label = QLabel("Click a group to view and broadcast messages")
         instruction_label.setStyleSheet(
             "font-size: 16px; padding: 12px; background-color: #e3f2fd; "
             "color: #1976d2; border-radius: 6px; font-weight: 600;"
@@ -1389,11 +1389,11 @@ class GroupsPage(QWidget):
                         if frequency:
                             try:
                                 freq_float = float(frequency)
-                                display_text = f"{group_name}  •  {freq_float:.1f} MHz"
+                                display_text = f"{group_name} -{freq_float:.1f} MHz"
                             except (ValueError, TypeError):
-                                display_text = f"{group_name}  •  {frequency} MHz"
+                                display_text = f"{group_name} -{frequency} MHz"
                         else:
-                            display_text = f"{group_name}  •  No frequency"
+                            display_text = f"{group_name} -No frequency"
 
                         item = QListWidgetItem(display_text)
                         item.setData(Qt.UserRole, group)
@@ -1507,7 +1507,7 @@ class GroupsPage(QWidget):
                 parent_window._start_silence_carrier(frequency, env_vars)
 
                 # Update status
-                self.status_label.setText(f"✓ Broadcasting silence carrier on {frequency:.1f} MHz")
+                self.status_label.setText(f"Broadcasting silence carrier on {frequency:.1f} MHz")
                 self.status_label.setStyleSheet("color: #2ecc94;")
 
             except Exception as e:
@@ -1616,7 +1616,7 @@ class MessageListScreen(QWidget):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(12)
 
-        self.btn_back = QPushButton("←")
+        self.btn_back = QPushButton("Back")
         self.btn_back.setMinimumHeight(60)
         self.btn_back.setStyleSheet("""
             QPushButton {
@@ -1636,7 +1636,7 @@ class MessageListScreen(QWidget):
         """)
         self.btn_back.clicked.connect(self.go_back)
 
-        self.btn_refresh = QPushButton("↻")
+        self.btn_refresh = QPushButton("Refresh")
         self.btn_refresh.setMinimumHeight(60)
         self.btn_refresh.setStyleSheet("""
             QPushButton {
@@ -1681,7 +1681,7 @@ class MessageListScreen(QWidget):
         self.btn_broadcast.clicked.connect(self.broadcast_selected)
         self.btn_broadcast.setEnabled(False)
 
-        self.btn_stop = QPushButton("⏹ Stop Broadcasting")
+        self.btn_stop = QPushButton("Stop Broadcasting")
         self.btn_stop.setMinimumHeight(60)
         self.btn_stop.setStyleSheet("""
             QPushButton {
@@ -1751,7 +1751,7 @@ class MessageListScreen(QWidget):
         self.current_frequency = frequency
 
         # Update header
-        self.header_label.setText(f"{group_name} • {frequency:.1f} MHz")
+        self.header_label.setText(f"{group_name} -{frequency:.1f} MHz")
 
         # Initialize broadcaster with current token
         if self.api_client and self.api_client._access_token:
@@ -1855,7 +1855,7 @@ class MessageListScreen(QWidget):
                 finally:
                     self.messages_list.setUpdatesEnabled(True)
 
-                self.status_label.setText(f"✓ Loaded {len(messages)} message(s) successfully")
+                self.status_label.setText(f"Loaded {len(messages)} message(s) successfully")
                 self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #2ecc94;")
                 logger.debug(f"Successfully displayed {len(messages)} messages")
 
@@ -1986,7 +1986,7 @@ class MessageListScreen(QWidget):
         self.btn_stop.setVisible(True)
         self.btn_loop_settings.setEnabled(False)
 
-        self.status_label.setText(f"Broadcasting {len(selected_items)} message(s) × {loop_count} loop(s) = {total_messages} total...")
+        self.status_label.setText(f"Broadcasting {len(selected_items)} message(s) x{loop_count} loop(s) = {total_messages} total...")
         self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #ff9800;")
         QApplication.processEvents()
 
@@ -1999,7 +1999,7 @@ class MessageListScreen(QWidget):
             # Check if stop was requested
             if self._stop_requested:
                 logger.info(f"Broadcasting stopped by user at loop {loop_iteration + 1}/{loop_count}")
-                self.status_label.setText(f"⏹ Broadcasting stopped: {success_count} succeeded, {error_count} failed")
+                self.status_label.setText(f"Broadcasting stopped: {success_count} succeeded, {error_count} failed")
                 self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #ff9800; font-weight: 600;")
                 break
 
@@ -2007,7 +2007,7 @@ class MessageListScreen(QWidget):
                 # Check if stop was requested before each message
                 if self._stop_requested:
                     logger.info(f"Broadcasting stopped by user at message {i+1}/{len(selected_items)} in loop {loop_iteration + 1}")
-                    self.status_label.setText(f"⏹ Broadcasting stopped: {success_count} succeeded, {error_count} failed")
+                    self.status_label.setText(f"Broadcasting stopped: {success_count} succeeded, {error_count} failed")
                     self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #ff9800; font-weight: 600;")
                     break
 
@@ -2087,7 +2087,7 @@ class MessageListScreen(QWidget):
         # Update status (no popup dialogs)
         if not self._stop_requested:
             if error_count == 0:
-                self.status_label.setText(f"✓ Successfully broadcast {success_count} message(s) ({loop_count} loop(s))")
+                self.status_label.setText(f"Successfully broadcast {success_count} message(s) ({loop_count} loop(s))")
                 self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #2ecc94; font-weight: 600;")
             else:
                 self.status_label.setText(
@@ -2115,7 +2115,7 @@ class MessageListScreen(QWidget):
         """Stop the current broadcast immediately by killing the process."""
         self._stop_requested = True
         self.btn_stop.setEnabled(False)
-        self.status_label.setText("⏹ Stopping broadcast immediately...")
+        self.status_label.setText("Stopping broadcast immediately...")
         self.status_label.setStyleSheet("font-size: 16px; padding: 8px; color: #ff9800;")
         logger.info("User requested immediate stop - killing broadcast process")
 
@@ -2155,7 +2155,7 @@ class MessageListScreen(QWidget):
             parent_window._start_silence_carrier(self.current_frequency, env_vars)
 
             # Update status with success
-            self.status_label.setText(f"✓ Broadcast complete • Silence carrier restarted on {self.current_frequency:.1f} MHz")
+            self.status_label.setText(f"Broadcast complete -Silence carrier restarted on {self.current_frequency:.1f} MHz")
 
         except Exception as e:
             logger.error(f"Failed to restart silence carrier: {e}")
