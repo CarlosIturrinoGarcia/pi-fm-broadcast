@@ -260,6 +260,7 @@ class OnScreenKeyboard(QWidget):
         self.setObjectName("OnScreenKeyboard")
         self._shift = False
         self._target = target
+        self._letter_buttons = []  # Store references to letter buttons
 
         rows = [
             list("1234567890"),
@@ -282,7 +283,11 @@ class OnScreenKeyboard(QWidget):
                 for w in prefix_widgets:
                     h.addWidget(w)
             for ch in chars:
-                h.addWidget(self._mk_btn(ch))
+                btn = self._mk_btn(ch)
+                h.addWidget(btn)
+                # Store letter buttons for caps lock updates
+                if ch.isalpha():
+                    self._letter_buttons.append(btn)
             if suffix_widgets:
                 for w in suffix_widgets:
                     h.addWidget(w)
@@ -342,6 +347,11 @@ class OnScreenKeyboard(QWidget):
 
     def _toggle_caps(self):
         self._shift = self.caps_btn.isChecked()
+        # Update all letter button labels
+        for btn in self._letter_buttons:
+            current_text = btn.text()
+            if current_text.isalpha():
+                btn.setText(current_text.upper() if self._shift else current_text.lower())
 
     def _key_clicked(self, label):
         if label in ("Caps", "Del", "Space", "Enter", "Hide"):
@@ -696,6 +706,14 @@ class KeyboardLineEdit(QLineEdit):
     def focusInEvent(self, event):
         """Override to show keyboard when focused."""
         super().focusInEvent(event)
+        if self._keyboard:
+            self._keyboard.set_target(self)
+            self._keyboard.setVisible(True)
+
+    def mousePressEvent(self, event):
+        """Override to ensure clicks set focus and show keyboard."""
+        super().mousePressEvent(event)
+        self.setFocus()
         if self._keyboard:
             self._keyboard.set_target(self)
             self._keyboard.setVisible(True)
